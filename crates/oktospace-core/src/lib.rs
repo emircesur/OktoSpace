@@ -5,6 +5,7 @@
 //! [`integrate`]ion and the record of what is installed ([`state`]).
 
 pub mod archive;
+pub mod build;
 pub mod catalog;
 pub mod detect;
 pub mod download;

@@ -335,6 +335,28 @@ impl Manager {
         }
     }
 
+    /// Add an app from a GitHub repository to build from source: no release with something to
+    /// download is needed. An app already in the library (or added) is returned as it is.
+    pub fn add_source_app_to_build(&self, repo: &str) -> anyhow::Result<AppEntry> {
+        let repo = crate::sources::normalize_repo(repo)?;
+        if let Some(app) = self.catalog().apps.into_iter().find(|a| a.repo.eq_ignore_ascii_case(&repo)) {
+            return Ok(app);
+        }
+        self.require_other_sources()?;
+        let mut settings = self.settings();
+        let catalog = self.inner.catalog.read().unwrap().clone();
+        let taken = |id: &str| catalog.app(id).is_some() || settings.other_sources.apps.iter().any(|a| a.id == id);
+        let id = crate::sources::new_id(&repo, &taken);
+        settings.other_sources.apps.push(crate::settings::CustomApp {
+            id: id.clone(),
+            name: crate::sources::name_from_repo(&repo),
+            repo,
+            binary: None,
+        });
+        self.set_settings(settings)?;
+        self.require_app(&id)
+    }
+
     /// Remove an app added from GitHub (uninstall it first).
     pub fn remove_source_app(&self, id: &str) -> anyhow::Result<()> {
         anyhow::ensure!(self.installed_app(id).is_none(), "uninstall {id} first");
@@ -975,6 +997,105 @@ impl Manager {
         Ok(record)
     }
 
+    /// How `id` builds from source, once its source is downloaded: see [`Manager::build`].
+    /// The release to build: `version`, or the latest (the default branch when there's none).
+    fn build_source(&self, app: &AppEntry, version: Option<&Version>) -> anyhow::Result<(String, Version)> {
+        let releases = match self.releases(&app.id) {
+            Some(list) => Some(list),
+            None => self.refresh(&app.id, false).ok(),
+        };
+        let release = releases.as_ref().and_then(|list| match version {
+            Some(v) => list.find(v).cloned(),
+            None => list.latest(self.settings().wants_prereleases(&app.id)).cloned(),
+        });
+        match (release, version) {
+            (Some(r), _) => {
+                let v = r.version.clone().ok_or_else(|| anyhow::anyhow!("release {} has no version", r.tag))?;
+                Ok((r.tag, v))
+            }
+            (None, Some(v)) => anyhow::bail!("{} has no release {v}", app.name),
+            // No release: the default branch, versioned by the day it was built.
+            (None, None) => {
+                let day = github::now_secs() / 86_400;
+                Ok(("HEAD".into(), Version::parse(&format!("0.0.0-source.{day}"))?))
+            }
+        }
+    }
+
+    /// Build `id` from source (the release `version`, the latest one, or the default branch) and
+    /// install what it builds. `log` gets the build's output line by line.
+    pub fn build(
+        &self,
+        id: &str,
+        version: Option<&Version>,
+        log: &(dyn Fn(String) + Sync),
+        progress: &Progress,
+    ) -> anyhow::Result<InstalledApp> {
+        let app = self.require_app(id)?;
+        let os = self.inner.platform.os;
+        progress.stage(Stage::Resolving);
+        let (tag, version) = self.build_source(&app, version)?;
+        log(format!("Building {} {version} from {} ({tag})", app.name, app.repo));
+
+        // The source, as GitHub packs it.
+        progress.stage(Stage::Downloading);
+        let work = self.inner.paths.cache.join("builds").join(&app.id);
+        let src = work.join(crate::build::safe_name(&tag));
+        if src.exists() {
+            std::fs::remove_dir_all(&src)?;
+        }
+        std::fs::create_dir_all(&work)?;
+        let tarball = work.join("source.tar.gz");
+        let _ = std::fs::remove_file(&tarball);
+        let url = format!("https://codeload.github.com/{}/tar.gz/{tag}", app.repo);
+        download::download(&self.inner.agent, &url, &tarball, None, progress)?;
+        archive::unpack(&tarball, &src, progress)?;
+        let _ = std::fs::remove_file(&tarball);
+
+        let recipe = crate::build::detect(&src, os).ok_or_else(|| {
+            anyhow::anyhow!("OktoSpace doesn't know how to build {} (no build system it recognises)", app.name)
+        })?;
+        let missing = crate::build::missing_tools(&recipe);
+        if !missing.is_empty() {
+            let list: Vec<String> = missing.iter().map(|t| format!("{} ({})", t.name, t.url)).collect();
+            anyhow::bail!("building {} needs {} first", app.name, list.join(" and "));
+        }
+        log(format!("Build system: {}", recipe.system.label()));
+        progress.stage(Stage::Building);
+        crate::build::run(&recipe, &src, log, progress)?;
+
+        let program = crate::build::find_output(&src, &recipe, app.binary(), os)
+            .ok_or_else(|| anyhow::anyhow!("the build finished, but OktoSpace couldn't find the program it made"))?;
+        log(format!("Built {}", program.display()));
+
+        // Packed like a release download and installed the usual way (shortcuts, updates,
+        // rollback, uninstall): the install finds it in the downloads folder.
+        let name = format!("{}-{version}-built.tar.gz", app.id);
+        let packed = self.inner.paths.downloads().join(&name);
+        crate::build::pack(&program, recipe.whole_folder, &packed)?;
+        let sha256 = download::sha256_file(&packed)?;
+        let size = std::fs::metadata(&packed).ok().map(|m| m.len());
+        let plan = Plan {
+            app: app.clone(),
+            release: Release {
+                tag: tag.clone(),
+                name: format!("{} {version} (built from source)", app.name),
+                version: Some(version.clone()),
+                prerelease: !version.pre.is_empty(),
+                published_at: None,
+                body: String::new(),
+                html_url: app.github_url(),
+                assets: Vec::new(),
+            },
+            asset: Asset { name, size, url: format!("file://{}", packed.display()), sha256: Some(sha256) },
+            kind: AssetKind::TarGz,
+            location: None,
+        };
+        let installed = self.install(&plan, progress)?;
+        let _ = std::fs::remove_dir_all(&src);
+        Ok(installed)
+    }
+
     /// Build the new AppImage from the installed one plus the changed blocks, when the release
     /// publishes a `.zsync` for it. Any failure falls back to a full download.
     fn try_delta(
@@ -1068,13 +1189,10 @@ impl Manager {
             if marker.exists() {
                 let _ = std::fs::remove_file(marker);
             }
+            // Most apps don't name their program after their id: then the only program there, or
+            // the one named most like it.
             find_executable(&dir, plan.app.binary(), self.inner.platform.os)
-                .or_else(|| {
-                    plan.app
-                        .custom
-                        .then(|| find_any_executable(&dir, plan.app.binary(), self.inner.platform.os))
-                        .flatten()
-                })
+                .or_else(|| find_any_executable(&dir, plan.app.binary(), self.inner.platform.os))
                 .ok_or_else(|| {
                     anyhow::anyhow!("installed {} but could not find its program in {}", plan.app.name, dir.display())
                 })

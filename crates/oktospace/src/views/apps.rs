@@ -446,7 +446,12 @@ pub fn main_button(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
         if theme::primary(ui, &p, "Install").clicked() {
             app.actions.push(Action::Install(id, None));
         }
-    } else if !s.known || s.app.build.is_some() {
+    } else if s.known && s.app.build.is_some() {
+        // Nothing to download for this computer, but it builds from source.
+        if theme::primary(ui, &p, "Build").on_hover_text("Build it from source and install it").clicked() {
+            app.actions.push(Action::Build(id));
+        }
+    } else if !s.known {
         // Not looked at yet, or nothing to download for this computer: its page has the
         // releases and building from source.
         if theme::pill(ui, &p, "Details").clicked() {
@@ -466,6 +471,9 @@ pub fn more_menu(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
         ui.set_min_width(200.0);
         if ui.button("Details and versions").clicked() {
             app.actions.push(Action::ShowApp(id.clone()));
+        }
+        if ui.add_enabled(!busy, egui::Button::new("Build from source")).clicked() {
+            app.actions.push(Action::Build(id.clone()));
         }
         if let Some(installed) = &s.installed {
             if s.update_available && ui.add_enabled(!busy, egui::Button::new("Update")).clicked() {
@@ -645,7 +653,9 @@ fn detail(app: &mut OktoSpaceApp, ui: &mut Ui, id: &str) {
             ui.label(RichText::new(&s.app.tagline).size(15.0).color(p.weak));
             ui.horizontal(|ui| {
                 let catalog = app.manager.catalog();
-                theme::chip(ui, &catalog.category_name(&s.app.category), p.weak);
+                if !s.app.custom {
+                    theme::chip(ui, &catalog.category_name(&s.app.category), p.weak);
+                }
                 theme::chip(ui, "Open source", p.good);
                 if s.app.custom {
                     ui.scope(|ui| theme::chip(ui, "From GitHub", p.accent))
@@ -686,9 +696,12 @@ fn detail(app: &mut OktoSpaceApp, ui: &mut Ui, id: &str) {
     });
     ui.add_space(12.0);
     ui.horizontal(|ui| {
-        for (tab, label) in
-            [(DetailTab::Overview, "Overview"), (DetailTab::Versions, "Versions"), (DetailTab::Readme, "README")]
-        {
+        for (tab, label) in [
+            (DetailTab::Overview, "Overview"),
+            (DetailTab::Versions, "Versions"),
+            (DetailTab::Readme, "README"),
+            (DetailTab::Build, "Build"),
+        ] {
             let selected = app.detail_tab == tab;
             let r = ui.add(
                 egui::Button::new(RichText::new(label).size(14.5).color(if selected { p.text } else { p.weak }))
@@ -711,8 +724,78 @@ fn detail(app: &mut OktoSpaceApp, ui: &mut Ui, id: &str) {
         DetailTab::Overview => overview(app, ui, &s),
         DetailTab::Versions => versions(app, ui, &s),
         DetailTab::Readme => readme(app, ui, &s),
+        DetailTab::Build => build_tab(app, ui, &s),
     }
     ui.add_space(30.0);
+}
+
+/// Building from source: how it builds, whether the tools are here, and the latest build's log.
+fn build_tab(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
+    let p = app.palette;
+    let id = s.app.id.clone();
+    let building = app.jobs.get(&id).is_some_and(|j| matches!(j.kind, crate::worker::JobKind::Build(_)));
+    theme::card_frame(&p, false).inner_margin(egui::Margin::same(14)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.label(RichText::new("Build from source").size(16.0).strong());
+        ui.label(
+            RichText::new(format!(
+                "OktoSpace downloads {}'s source from github.com/{} (the latest release, or the default branch when there's none), builds it on this computer and installs the program like any other: with shortcuts, updates and uninstall.",
+                s.app.name, s.app.repo
+            ))
+            .color(p.weak),
+        );
+        ui.add_space(8.0);
+        let tool = s.app.build.as_deref().and_then(oktospace_core::build::tool_for);
+        match (&s.app.build, &tool) {
+            (Some(_), Some(tool)) => {
+                let found = oktospace_core::build::find_program(tool.program).is_some();
+                ui.horizontal(|ui| {
+                    ui.label(format!("Builds with {}.", tool.name));
+                    if found {
+                        theme::chip(ui, &format!("{} is installed", tool.name), p.good);
+                    } else {
+                        theme::chip(ui, &format!("Needs {}", tool.name), p.warn);
+                        if ui.add(egui::Button::new(RichText::new(format!("Get {} ↗", tool.name)).color(p.accent)).frame(false)).clicked() {
+                            app.actions.push(Action::OpenUrl(tool.url.to_string()));
+                        }
+                    }
+                });
+            }
+            _ => {
+                ui.label(RichText::new("OktoSpace recognises Cargo, Go, Zig, CMake, Meson, Swift, .NET, npm and Make projects once the source is downloaded, and says which tools are missing before building.").color(p.weak));
+            }
+        }
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            if building {
+                ui.add(egui::Spinner::new());
+                ui.label("Building…");
+                if ui.button("Cancel").clicked() {
+                    app.actions.push(Action::Cancel(id.clone()));
+                }
+            } else if theme::primary(ui, &p, if s.installed.is_some() { "Build and reinstall" } else { "Build and install" }).clicked() {
+                app.actions.push(Action::Build(id.clone()));
+            }
+        });
+    });
+    let Some(log) = app.build_logs.get(&id) else { return };
+    ui.add_space(10.0);
+    ui.label(RichText::new("Build log").strong());
+    theme::card_frame(&p, false).inner_margin(egui::Margin::same(10)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        egui::ScrollArea::vertical().max_height(360.0).stick_to_bottom(true).auto_shrink([false, true]).show(
+            ui,
+            |ui| {
+                for line in log {
+                    ui.label(RichText::new(line).monospace().size(11.5).color(if line.starts_with('$') {
+                        p.accent
+                    } else {
+                        p.text
+                    }));
+                }
+            },
+        );
+    });
 }
 
 fn overview(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {

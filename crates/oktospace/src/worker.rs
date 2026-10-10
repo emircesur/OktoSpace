@@ -19,6 +19,8 @@ pub enum JobKind {
     Uninstall,
     Rollback,
     Repair,
+    /// Build from source (a release, or the latest) and install it.
+    Build(Option<Version>),
 }
 
 impl JobKind {
@@ -29,12 +31,13 @@ impl JobKind {
             JobKind::Uninstall => "Removing",
             JobKind::Rollback => "Rolling back",
             JobKind::Repair => "Repairing",
+            JobKind::Build(_) => "Building",
         }
     }
 
     /// Whether the job replaces or removes an app's files (and so cares if the app is open).
     pub fn touches_app(&self) -> bool {
-        matches!(self, JobKind::Update | JobKind::Uninstall | JobKind::Rollback | JobKind::Repair)
+        matches!(self, JobKind::Update | JobKind::Uninstall | JobKind::Rollback | JobKind::Repair | JobKind::Build(_))
     }
 }
 
@@ -92,6 +95,10 @@ pub enum Msg {
     Icons(Vec<String>),
     Readme(String, Result<String, String>),
     Releases(String, Result<(), String>),
+    BuildLog {
+        key: String,
+        line: String,
+    },
     Verified(String, Result<VerifyReport, String>),
     Tour(String, Result<oktospace_core::tour::Tour, String>),
     Shot(String, Result<egui::ColorImage, String>),
@@ -168,6 +175,12 @@ pub fn start(bus: &Bus, manager: &Manager, key: &str, job: &Job) {
             }
             JobKind::Rollback => manager.rollback(&key).map(|r| format!("{name} is back on {}", r.current.version)),
             JobKind::Uninstall => manager.uninstall(&key).map(|()| format!("{name} was uninstalled")),
+            JobKind::Build(version) => {
+                let log = |line: String| bus.send(Msg::BuildLog { key: key.clone(), line });
+                manager
+                    .build(&key, version.as_ref(), &log, &progress)
+                    .map(|r| format!("{name} {} was built from source and installed", r.current.version))
+            }
         };
         let result = result.map_err(|err| {
             if is_cancelled(&err) {

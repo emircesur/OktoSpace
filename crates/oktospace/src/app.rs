@@ -40,6 +40,7 @@ pub enum DetailTab {
     Overview,
     Versions,
     Readme,
+    Build,
 }
 
 /// Things views ask for; handled after drawing so views only need shared access.
@@ -57,6 +58,8 @@ pub enum Action {
     FillCache,
     Uninstall(String),
     Rollback(String),
+    /// Build from source and install (the Build tab shows the log).
+    Build(String),
     VerifyAndRepair(String),
     Cancel(String),
     Launch(String, Vec<PathBuf>),
@@ -145,6 +148,8 @@ pub struct OktoSpaceApp {
     /// Apps whose releases are being fetched, or couldn't be (with why).
     pub releases_loading: HashSet<String>,
     pub releases_failed: HashMap<String, String>,
+    /// Each app's latest build log.
+    pub build_logs: HashMap<String, Vec<String>>,
     pub verify_results: HashMap<String, VerifyReport>,
     pub tours: HashMap<String, Result<oktospace_core::tour::Tour, String>>,
     tour_loading: HashSet<String>,
@@ -222,6 +227,7 @@ impl OktoSpaceApp {
             readme_loading: HashSet::new(),
             releases_loading: HashSet::new(),
             releases_failed: HashMap::new(),
+            build_logs: HashMap::new(),
             verify_results: HashMap::new(),
             tours: HashMap::new(),
             tour_loading: HashSet::new(),
@@ -277,6 +283,7 @@ impl OktoSpaceApp {
                         app.detail_tab = match tab {
                             "versions" => DetailTab::Versions,
                             "readme" => DetailTab::Readme,
+                            "build" => DetailTab::Build,
                             _ => DetailTab::Overview,
                         };
                     }
@@ -421,6 +428,13 @@ impl OktoSpaceApp {
                     self.after_refresh(ctx, manual);
                 }
                 Msg::Icons(ids) => theme::load_icons(ctx, &self.manager, Some(&ids)),
+                Msg::BuildLog { key, line } => {
+                    let log = self.build_logs.entry(key).or_default();
+                    log.push(line);
+                    if log.len() > 4000 {
+                        log.drain(..1000);
+                    }
+                }
                 Msg::Releases(id, result) => {
                     self.releases_loading.remove(&id);
                     if let Err(err) = result {
@@ -815,6 +829,13 @@ impl OktoSpaceApp {
                 }
                 Action::Uninstall(id) => self.request(&id, JobKind::Uninstall),
                 Action::Rollback(id) => self.request(&id, JobKind::Rollback),
+                Action::Build(id) => {
+                    self.build_logs.remove(&id);
+                    if self.apps_view == AppsView::Detail(id.clone()) {
+                        self.detail_tab = DetailTab::Build;
+                    }
+                    self.request(&id, JobKind::Build(None));
+                }
                 Action::VerifyAndRepair(id) => {
                     self.toast(ToastKind::Info, format!("Checking {}'s files…", self.app_name(&id)));
                     worker::verify(&self.bus, &self.manager, &id);
@@ -1332,6 +1353,7 @@ fn short_verb(kind: &JobKind) -> &'static str {
         JobKind::Update => "Update",
         JobKind::Rollback => "Roll back",
         JobKind::Repair => "Repair",
+        JobKind::Build(_) => "Build",
         _ => "Continue",
     }
 }

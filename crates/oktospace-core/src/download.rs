@@ -14,6 +14,7 @@ use ureq::Agent;
 pub enum Stage {
     Resolving,
     Downloading,
+    Building,
     Verifying,
     Installing,
     Integrating,
@@ -25,6 +26,7 @@ impl Stage {
         match self {
             Stage::Resolving => "Preparing",
             Stage::Downloading => "Downloading",
+            Stage::Building => "Building",
             Stage::Verifying => "Verifying",
             Stage::Installing => "Installing",
             Stage::Integrating => "Adding shortcuts",

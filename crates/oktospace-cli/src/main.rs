@@ -87,6 +87,14 @@ enum Command {
     Check,
     /// Go back to the version that was installed before the last update.
     Rollback { app: String },
+    /// Build an app from source and install it: a library app, or any GitHub repository
+    /// (`owner/repo`). Builds the latest release (or `--version`), or the default branch when
+    /// there's no release.
+    Build {
+        app: String,
+        #[arg(long)]
+        version: Option<Version>,
+    },
     /// Check an app's files against what was installed.
     Verify { app: String },
     /// Reinstall an app's current version from a fresh download.
@@ -347,6 +355,24 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
                 }
                 return Ok(ExitCode::from(10));
             }
+        }
+        Command::Build { app, version } => {
+            let id = if manager.app(&app).is_some() || !app.contains('/') {
+                app
+            } else {
+                manager.add_source_app_to_build(&app)?.id
+            };
+            let log = |line: String| println!("  {line}");
+            let cancel = std::sync::atomic::AtomicBool::new(false);
+            let report = |_e: ProgressEvent| {};
+            let progress = Progress { report: &report, cancel: &cancel };
+            let record = manager.build(&id, version.as_ref(), &log, &progress)?;
+            say!(
+                "Built and installed {} {}{}",
+                id,
+                record.current.version,
+                record.current.executable.as_ref().map(|e| format!(" ({})", e.display())).unwrap_or_default()
+            );
         }
         Command::Rollback { app } => {
             let record = manager.rollback(&app)?;
