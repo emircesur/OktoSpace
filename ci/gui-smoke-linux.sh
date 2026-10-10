@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# Start the CraftSpace window on a virtual X desktop with a status-notifier tray (xfce4-panel)
+# Start the OktoSpace window on a virtual X desktop with a status-notifier tray (xfce4-panel)
 # and a notification service (dunst), then check that:
-#   - the tray icon registers, even when the panel starts after CraftSpace (as at login),
+#   - the tray icon registers, even when the panel starts after OktoSpace (as at login),
 #   - a test notification is accepted,
-#   - closing the window keeps CraftSpace running in the tray,
+#   - closing the window keeps OktoSpace running in the tray,
 #   - activating the tray icon brings the window back.
 # Screenshots go to $OUT (default: gui-screenshots/).
 set -euo pipefail
 
-BIN="${BIN:-target/debug/craftspace}"
+BIN="${BIN:-target/debug/oktospace}"
 OUT="${OUT:-gui-screenshots}"
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 WORK="$(mktemp -d)"
-export HOME="$WORK/home" CRAFTSPACE_HOME="$WORK/craftspace"
+export HOME="$WORK/home" OKTOSPACE_HOME="$WORK/oktospace"
 export DISPLAY=:91 XDG_CURRENT_DESKTOP=XFCE
-export RUST_LOG=info CRAFTSPACE_TEST_NOTIFICATION=1
-LOG="$OUT/craftspace.log"
+export RUST_LOG=info OKTOSPACE_TEST_NOTIFICATION=1
+LOG="$OUT/oktospace.log"
 
 # The default Xfce panel layout, which has the system tray.
 mkdir -p "$HOME/.config/xfce4/xfconf/xfce-perchannel-xml"
@@ -30,7 +30,7 @@ trap cleanup EXIT
 dunst >/dev/null 2>&1 &
 
 fail() { echo "FAIL: $*"; echo "--- log"; cat "$LOG"; exit 1; }
-visible() { xdotool search --onlyvisible --name '^CraftSpace$' 2>/dev/null | head -1; }
+visible() { xdotool search --onlyvisible --name '^OktoSpace$' 2>/dev/null | head -1; }
 
 "$BIN" >"$LOG" 2>&1 &
 APP=$!
@@ -38,7 +38,7 @@ for _ in $(seq 30); do [ -n "$(visible)" ] && break; sleep 1; done
 [ -n "$(visible)" ] || fail "the window didn't appear"
 sleep 4
 
-# The panel starts after CraftSpace; the icon should register once it's up.
+# The panel starts after OktoSpace; the icon should register once it's up.
 grep -q "tray icon ready" "$LOG" || fail "no tray icon"
 xfce4-panel >/dev/null 2>&1 &
 SERVICE=
@@ -50,7 +50,7 @@ for _ in $(seq 20); do
   [ -n "$SERVICE" ] && break
 done
 [ -n "$SERVICE" ] || fail "the icon didn't register with the panel"
-grep -q "tray icon shown by the panel" "$LOG" || fail "CraftSpace didn't notice the panel"
+grep -q "tray icon shown by the panel" "$LOG" || fail "OktoSpace didn't notice the panel"
 echo "tray item: $SERVICE"
 sleep 2
 import -window root "$OUT/linux-window.png"
@@ -60,7 +60,7 @@ echo "notification: accepted"
 # Close the window as the window manager would.
 python3 "$(dirname "$0")/x11-close-window.py" "$(visible)"
 sleep 4
-kill -0 "$APP" 2>/dev/null || fail "CraftSpace quit instead of staying in the tray"
+kill -0 "$APP" 2>/dev/null || fail "OktoSpace quit instead of staying in the tray"
 [ -z "$(visible)" ] || fail "the window is still showing after closing it"
 grep -q "still running in the tray" "$LOG" || fail "no tray message in the log"
 echo "close: hidden in the tray"

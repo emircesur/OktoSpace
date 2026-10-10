@@ -1,5 +1,5 @@
-# Builds CraftSpace for Windows, macOS and Linux. On a `v*` tag the archives are published with
-# the same naming scheme as the ArtCraft apps (plus SHA256SUMS.txt), which is how CraftSpace finds
+# Builds OktoSpace for Windows, macOS and Linux. On a `v*` tag the archives are published with
+# the same naming scheme as the ArtCraft apps (plus SHA256SUMS.txt), which is how OktoSpace finds
 # its own updates. Running it by hand (workflow_dispatch) builds and smoke-tests; with a `tag`
 # input it also publishes that release, creating the tag on the commit it built.
 name: Release
@@ -49,18 +49,18 @@ jobs:
         with:
           key: ${{ matrix.target }}
       - name: Build
-        run: cargo build --release --locked --target ${{ matrix.target }} -p craftspace -p craftspace-cli
+        run: cargo build --release --locked --target ${{ matrix.target }} -p oktospace -p oktospace-cli
       - name: Version
         id: version
         shell: bash
-        run: echo "version=$(cargo pkgid -p craftspace | sed 's/.*[#@]//')" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(cargo pkgid -p oktospace | sed 's/.*[#@]//')" >> "$GITHUB_OUTPUT"
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $name = "craftspace-${{ steps.version.outputs.version }}-${{ matrix.platform }}-portable"
+          $name = "oktospace-${{ steps.version.outputs.version }}-${{ matrix.platform }}-portable"
           New-Item -ItemType Directory -Path "dist/$name" | Out-Null
-          Copy-Item "target/${{ matrix.target }}/release/craftspace.exe", "target/${{ matrix.target }}/release/craftspace-cli.exe", README.md, LICENSE-MIT, LICENSE-APACHE "dist/$name/"
+          Copy-Item "target/${{ matrix.target }}/release/oktospace.exe", "target/${{ matrix.target }}/release/oktospace-cli.exe", README.md, LICENSE-MIT, LICENSE-APACHE "dist/$name/"
           Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip"
       - name: Setup (Windows)
         if: runner.os == 'Windows'
@@ -73,66 +73,66 @@ jobs:
             $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           }
           $arch = if ('${{ matrix.platform }}' -eq 'windows-arm64') { 'arm64' } else { 'x64' }
-          & $iscc "/DVersion=${{ steps.version.outputs.version }}" "/DArch=$arch" "/DSource=$PWD\target\${{ matrix.target }}\release" "/O$PWD\dist" packaging\windows\craftspace.iss
+          & $iscc "/DVersion=${{ steps.version.outputs.version }}" "/DArch=$arch" "/DSource=$PWD\target\${{ matrix.target }}\release" "/O$PWD\dist" packaging\windows\oktospace.iss
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Get-ChildItem dist
       - name: Smoke test (Windows x64)
         if: matrix.platform == 'windows-x64'
         shell: pwsh
         run: |
-          & "target/${{ matrix.target }}/release/craftspace-cli.exe" --version
-          & "target/${{ matrix.target }}/release/craftspace-cli.exe" paths
+          & "target/${{ matrix.target }}/release/oktospace-cli.exe" --version
+          & "target/${{ matrix.target }}/release/oktospace-cli.exe" paths
           # The setup installs, runs and uninstalls cleanly.
           $setup = Get-ChildItem dist/*-setup.exe | Select-Object -First 1
           Start-Process $setup.FullName -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/TASKS=startup' -Wait
-          $cli = "$env:LOCALAPPDATA\CraftSpace\app\bin\craftspace-cli.exe"
-          if (-not (Test-Path $cli)) { throw "the setup didn't install CraftSpace" }
+          $cli = "$env:LOCALAPPDATA\OktoSpace\app\bin\oktospace-cli.exe"
+          if (-not (Test-Path $cli)) { throw "the setup didn't install OktoSpace" }
           & $cli --version
-          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\CraftSpace.lnk")) { throw "no Start menu entry" }
-          $run = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name CraftSpace -ErrorAction SilentlyContinue
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\OktoSpace.lnk")) { throw "no Start menu entry" }
+          $run = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name OktoSpace -ErrorAction SilentlyContinue
           if (-not $run) { throw "start at login wasn't set" }
-          Start-Process "$env:LOCALAPPDATA\CraftSpace\app\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES' -Wait
+          Start-Process "$env:LOCALAPPDATA\OktoSpace\app\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES' -Wait
           # The uninstaller hands over to a copy of itself, so wait for the files to go.
           for ($i = 0; $i -lt 30 -and (Test-Path $cli); $i++) { Start-Sleep 1 }
-          if (Test-Path $cli) { throw "the uninstaller left CraftSpace behind" }
-          if (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name CraftSpace -ErrorAction SilentlyContinue) { throw "start at login is still set" }
+          if (Test-Path $cli) { throw "the uninstaller left OktoSpace behind" }
+          if (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name OktoSpace -ErrorAction SilentlyContinue) { throw "start at login is still set" }
           Write-Host "setup: install, start at login and uninstall all work"
       - name: Package (Linux)
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          name="craftspace-${{ steps.version.outputs.version }}-${{ matrix.platform }}"
+          name="oktospace-${{ steps.version.outputs.version }}-${{ matrix.platform }}"
           root="dist/$name"
-          install -Dm755 "target/${{ matrix.target }}/release/craftspace" "$root/bin/craftspace"
-          install -Dm755 "target/${{ matrix.target }}/release/craftspace-cli" "$root/bin/craftspace-cli"
-          install -Dm644 packaging/linux/craftspace.desktop "$root/share/applications/craftspace.desktop"
-          install -Dm644 assets/craftspace-256.png "$root/share/icons/hicolor/256x256/apps/craftspace.png"
-          install -Dm644 README.md "$root/share/doc/craftspace/README.md"
-          install -Dm644 LICENSE-MIT "$root/share/doc/craftspace/LICENSE-MIT"
-          install -Dm644 LICENSE-APACHE "$root/share/doc/craftspace/LICENSE-APACHE"
+          install -Dm755 "target/${{ matrix.target }}/release/oktospace" "$root/bin/oktospace"
+          install -Dm755 "target/${{ matrix.target }}/release/oktospace-cli" "$root/bin/oktospace-cli"
+          install -Dm644 packaging/linux/oktospace.desktop "$root/share/applications/oktospace.desktop"
+          install -Dm644 assets/oktospace-256.png "$root/share/icons/hicolor/256x256/apps/oktospace.png"
+          install -Dm644 README.md "$root/share/doc/oktospace/README.md"
+          install -Dm644 LICENSE-MIT "$root/share/doc/oktospace/LICENSE-MIT"
+          install -Dm644 LICENSE-APACHE "$root/share/doc/oktospace/LICENSE-APACHE"
           tar -C dist -czf "dist/$name.tar.gz" "$name"
-          "$root/bin/craftspace-cli" --version
+          "$root/bin/oktospace-cli" --version
       - name: AppImage
         if: runner.os == 'Linux'
         shell: bash
         run: |
           arch=x86_64
           [ "${{ matrix.platform }}" = linux-aarch64 ] && arch=aarch64
-          name="craftspace-${{ steps.version.outputs.version }}-${{ matrix.platform }}"
-          appdir="dist/CraftSpace.AppDir"
-          install -Dm755 "target/${{ matrix.target }}/release/craftspace" "$appdir/usr/bin/craftspace"
-          install -Dm755 "target/${{ matrix.target }}/release/craftspace-cli" "$appdir/usr/bin/craftspace-cli"
-          install -Dm644 packaging/linux/craftspace.desktop "$appdir/usr/share/applications/craftspace.desktop"
-          install -Dm644 assets/craftspace-256.png "$appdir/usr/share/icons/hicolor/256x256/apps/craftspace.png"
+          name="oktospace-${{ steps.version.outputs.version }}-${{ matrix.platform }}"
+          appdir="dist/OktoSpace.AppDir"
+          install -Dm755 "target/${{ matrix.target }}/release/oktospace" "$appdir/usr/bin/oktospace"
+          install -Dm755 "target/${{ matrix.target }}/release/oktospace-cli" "$appdir/usr/bin/oktospace-cli"
+          install -Dm644 packaging/linux/oktospace.desktop "$appdir/usr/share/applications/oktospace.desktop"
+          install -Dm644 assets/oktospace-256.png "$appdir/usr/share/icons/hicolor/256x256/apps/oktospace.png"
           install -Dm755 packaging/linux/AppRun "$appdir/AppRun"
-          cp packaging/linux/craftspace.desktop "$appdir/craftspace.desktop"
-          cp assets/craftspace-256.png "$appdir/craftspace.png"
-          ln -sf craftspace.png "$appdir/.DirIcon"
+          cp packaging/linux/oktospace.desktop "$appdir/oktospace.desktop"
+          cp assets/oktospace-256.png "$appdir/oktospace.png"
+          ln -sf oktospace.png "$appdir/.DirIcon"
           curl -fsSL -o appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-$arch.AppImage"
           chmod +x appimagetool
           # Update information, so AppImageUpdate (and the .zsync next to it) can update it too.
           ARCH=$arch APPIMAGE_EXTRACT_AND_RUN=1 ./appimagetool --no-appstream \
-            -u "gh-releases-zsync|emircesur|CRAFTSPACE|latest|craftspace-*-${{ matrix.platform }}.AppImage.zsync" \
+            -u "gh-releases-zsync|emircesur|OKTOSPACE|latest|oktospace-*-${{ matrix.platform }}.AppImage.zsync" \
             "$appdir" "dist/$name.AppImage"
           rm -rf "$appdir" appimagetool
           [ -f "$name.AppImage.zsync" ] && mv "$name.AppImage.zsync" dist/
@@ -144,9 +144,9 @@ jobs:
         shell: bash
         run: |
           cargo install cargo-deb --locked
-          cargo deb -p craftspace --no-build --target ${{ matrix.target }} --output "dist/craftspace-${{ steps.version.outputs.version }}-${{ matrix.platform }}.deb"
+          cargo deb -p oktospace --no-build --target ${{ matrix.target }} --output "dist/oktospace-${{ steps.version.outputs.version }}-${{ matrix.platform }}.deb"
           dpkg-deb --info dist/*.deb | head -20
-          sudo apt-get install -y ./dist/*.deb && craftspace-cli --version
+          sudo apt-get install -y ./dist/*.deb && oktospace-cli --version
       # Upload whatever was packaged, even if a later step (the setup) failed.
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
@@ -178,13 +178,13 @@ jobs:
       - uses: actions/checkout@v4
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - run: make -f .copr/Makefile srpm outdir="$PWD/out"
-      - run: rpmbuild --rebuild --define "_rpmdir $PWD/out" out/craftspace-*.src.rpm
+      - run: rpmbuild --rebuild --define "_rpmdir $PWD/out" out/oktospace-*.src.rpm
       - name: Name it like the other packages
         run: |
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
           mkdir -p dist
-          cp out/${{ matrix.arch }}/craftspace-$version-*.rpm "dist/craftspace-$version-linux-${{ matrix.arch }}.rpm"
-          dnf -y install dist/*.rpm && craftspace-cli --version
+          cp out/${{ matrix.arch }}/oktospace-$version-*.rpm "dist/oktospace-$version-linux-${{ matrix.arch }}.rpm"
+          dnf -y install dist/*.rpm && oktospace-cli --version
       - uses: actions/upload-artifact@v4
         with:
           name: rpm-${{ matrix.arch }}
@@ -211,7 +211,7 @@ jobs:
       - name: Build both architectures
         run: |
           for t in aarch64-apple-darwin x86_64-apple-darwin; do
-            cargo build --release --locked --target $t -p craftspace -p craftspace-cli
+            cargo build --release --locked --target $t -p oktospace -p oktospace-cli
           done
       - name: Import the Developer ID certificate
         if: env.APPLE_CERTIFICATE != ''
@@ -225,27 +225,27 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k ci "$keychain"
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
           rm "$RUNNER_TEMP/cert.p12"
-      - name: Bundle CraftSpace.app and the disk image
+      - name: Bundle OktoSpace.app and the disk image
         run: |
-          version=$(cargo pkgid -p craftspace | sed 's/.*[#@]//')
-          app=dist/CraftSpace.app
+          version=$(cargo pkgid -p oktospace | sed 's/.*[#@]//')
+          app=dist/OktoSpace.app
           mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-          for bin in craftspace craftspace-cli; do
+          for bin in oktospace oktospace-cli; do
             lipo -create -output "$app/Contents/MacOS/$bin" \
               target/aarch64-apple-darwin/release/$bin target/x86_64-apple-darwin/release/$bin
           done
           sed "s/@VERSION@/$version/g" packaging/macos/Info.plist > "$app/Contents/Info.plist"
-          iconset=dist/craftspace.iconset
+          iconset=dist/oktospace.iconset
           mkdir -p "$iconset"
           for s in 16 32 128 256 512; do
-            sips -z $s $s assets/craftspace-macos.png --out "$iconset/icon_${s}x${s}.png" >/dev/null
-            d=$((s * 2)); sips -z $d $d assets/craftspace-macos.png --out "$iconset/icon_${s}x${s}@2x.png" >/dev/null
+            sips -z $s $s assets/oktospace-macos.png --out "$iconset/icon_${s}x${s}.png" >/dev/null
+            d=$((s * 2)); sips -z $d $d assets/oktospace-macos.png --out "$iconset/icon_${s}x${s}@2x.png" >/dev/null
           done
-          iconutil -c icns "$iconset" -o "$app/Contents/Resources/craftspace.icns"
-          dmg="dist/craftspace-$version-macos-universal.dmg"
+          iconutil -c icns "$iconset" -o "$app/Contents/Resources/oktospace.icns"
+          dmg="dist/oktospace-$version-macos-universal.dmg"
           if [ -n "$APPLE_SIGNING_IDENTITY" ]; then
             # Developer ID with the hardened runtime, as notarization requires.
-            for bin in craftspace-cli craftspace; do
+            for bin in oktospace-cli oktospace; do
               codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$app/Contents/MacOS/$bin"
             done
             codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$app"
@@ -255,28 +255,28 @@ jobs:
           fi
           codesign --verify --strict --verbose=2 "$app"
           mkdir -p dist/dmg && cp -R "$app" dist/dmg/ && ln -s /Applications dist/dmg/Applications
-          hdiutil create -volname CraftSpace -srcfolder dist/dmg -ov -format UDZO "$dmg"
+          hdiutil create -volname OktoSpace -srcfolder dist/dmg -ov -format UDZO "$dmg"
           if [ -n "$APPLE_SIGNING_IDENTITY" ]; then
             codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$dmg"
           fi
-          "$app/Contents/MacOS/craftspace-cli" --version
-          lipo -info "$app/Contents/MacOS/craftspace"
+          "$app/Contents/MacOS/oktospace-cli" --version
+          lipo -info "$app/Contents/MacOS/oktospace"
       - name: Notarize
         if: env.APPLE_SIGNING_IDENTITY != '' && env.APPLE_ID != ''
         run: |
-          version=$(cargo pkgid -p craftspace | sed 's/.*[#@]//')
-          dmg="dist/craftspace-$version-macos-universal.dmg"
+          version=$(cargo pkgid -p oktospace | sed 's/.*[#@]//')
+          dmg="dist/oktospace-$version-macos-universal.dmg"
           xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
           xcrun stapler staple "$dmg"
           spctl --assess --type open --context context:primary-signature --verbose "$dmg"
-      - name: Smoke test the disk image with CraftSpace's own installer
+      - name: Smoke test the disk image with OktoSpace's own installer
         run: |
-          version=$(cargo pkgid -p craftspace | sed 's/.*[#@]//')
-          cargo build -p craftspace-cli
+          version=$(cargo pkgid -p oktospace | sed 's/.*[#@]//')
+          cargo build -p oktospace-cli
           mkdir -p "$RUNNER_TEMP/mnt"
-          hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/mnt" "dist/craftspace-$version-macos-universal.dmg"
+          hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/mnt" "dist/oktospace-$version-macos-universal.dmg"
           ls "$RUNNER_TEMP/mnt"
-          "$RUNNER_TEMP/mnt/CraftSpace.app/Contents/MacOS/craftspace-cli" --version
+          "$RUNNER_TEMP/mnt/OktoSpace.app/Contents/MacOS/oktospace-cli" --version
           hdiutil detach "$RUNNER_TEMP/mnt"
       - uses: actions/upload-artifact@v4
         with:

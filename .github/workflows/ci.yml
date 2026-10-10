@@ -41,7 +41,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build -p craftspace -p craftspace-cli
+      - run: cargo build -p oktospace -p oktospace-cli
       - name: Linux
         if: runner.os == 'Linux'
         run: sudo apt-get install -y fontconfig && ci/e2e-linux.sh
@@ -53,7 +53,7 @@ jobs:
         shell: pwsh
         run: ci/e2e-windows.ps1
 
-  # Apps installed without CraftSpace on Linux: a .deb from apt and a Flatpak.
+  # Apps installed without OktoSpace on Linux: a .deb from apt and a Flatpak.
   found-apps:
     name: Found apps (Linux deb, Flatpak)
     runs-on: ubuntu-latest
@@ -63,7 +63,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build -p craftspace-cli
+      - run: cargo build -p oktospace-cli
       - run: sudo apt-get update && sudo apt-get install -y flatpak
       - run: ci/e2e-found-linux.sh
 
@@ -82,9 +82,9 @@ jobs:
       - name: Source RPM (as Copr makes it)
         run: make -f .copr/Makefile srpm outdir="$PWD/out"
       - name: Binary RPM
-        run: rpmbuild --rebuild --define "_rpmdir $PWD/out" out/craftspace-*.src.rpm
+        run: rpmbuild --rebuild --define "_rpmdir $PWD/out" out/oktospace-*.src.rpm
       - name: Install with dnf
-        run: dnf -y install out/*/craftspace-*.rpm
+        run: dnf -y install out/*/oktospace-*.rpm
       - name: Install ArtCraft apps as RPMs
         run: ci/e2e-fedora.sh
 
@@ -100,7 +100,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build -p craftspace
+      - run: cargo build -p oktospace
       - name: Linux (Xvfb, xfce4-panel tray, dunst notifications)
         if: runner.os == 'Linux'
         run: |

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.emircesur.oktospace</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>OktoSpace</name>
+  <summary>Install, update and build apps from GitHub</summary>
+  <description>
+    <p>
+      OktoSpace installs, updates and builds apps from GitHub: an App library of
+      open-source apps and any repository you add, installed from their releases or built
+      from source, and kept up to date in one place.
+    </p>
+    <ul>
+      <li>Installs per user, or as system packages through dnf or apt</li>
+      <li>Checksum-verified downloads that resume, with update channels and rollback</li>
+      <li>Recent files, news, tutorials, fonts and a command line for scripts</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">oktospace.desktop</launchable>
+  <url type="homepage">https://github.com/emircesur/OktoSpace</url>
+  <url type="bugtracker">https://github.com/emircesur/OktoSpace/issues</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>The App library</caption>
+      <image>https://raw.githubusercontent.com/emircesur/OktoSpace/HEAD/docs/screenshots/apps.png</image>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-10-09"/>
+  </releases>
+</component>

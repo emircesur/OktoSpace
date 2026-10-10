@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=OktoSpace
+GenericName=App Manager
+Comment=Install, update and build apps from GitHub
+Exec=oktospace
+TryExec=oktospace
+Icon=oktospace
+Terminal=false
+StartupNotify=true
+StartupWMClass=oktospace
+Categories=Graphics;Utility;PackageManager;
+Keywords=github;install;update;build;apps;releases;

@@ -1,7 +1,7 @@
-# Builds the released version in Fedora Copr, so Fedora users get CraftSpace updates through dnf:
-#   sudo dnf copr enable <owner>/craftspace && sudo dnf install craftspace
+# Builds the released version in Fedora Copr, so Fedora users get OktoSpace updates through dnf:
+#   sudo dnf copr enable <owner>/oktospace && sudo dnf install oktospace
 #
-# One-time setup (see README › Fedora): create a Copr project named "craftspace", then add the
+# One-time setup (see README › Fedora): create a Copr project named "oktospace", then add the
 # repository secrets COPR_LOGIN, COPR_USERNAME and COPR_TOKEN from
 # https://copr.fedorainfracloud.org/api/. Without them this workflow does nothing.
 name: Copr
@@ -38,4 +38,4 @@ jobs:
           printf '[copr-cli]\nlogin = %s\nusername = %s\ntoken = %s\ncopr_url = https://copr.fedorainfracloud.org\n' \
             "$COPR_LOGIN" "$COPR_USERNAME" "$COPR_TOKEN" > ~/.config/copr
           copr-cli buildscm --clone-url "https://github.com/${GITHUB_REPOSITORY}" --commit "$REF" \
-            --method make_srpm --spec packaging/fedora/craftspace.spec "$COPR_USERNAME/craftspace"
+            --method make_srpm --spec packaging/fedora/oktospace.spec "$COPR_USERNAME/oktospace"

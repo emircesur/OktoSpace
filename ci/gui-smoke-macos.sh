@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Start the CraftSpace window on the runner's desktop and check that:
+# Start the OktoSpace window on the runner's desktop and check that:
 #   - the window appears and the menu bar icon is created,
 #   - a test notification is accepted (reported, not required),
-#   - closing the window keeps CraftSpace running in the menu bar (when the runner lets us
+#   - closing the window keeps OktoSpace running in the menu bar (when the runner lets us
 #     press the close button through System Events).
 # Screenshots go to $OUT (default: gui-screenshots/).
 set -euo pipefail
 
-BIN="${BIN:-target/debug/craftspace}"
+BIN="${BIN:-target/debug/oktospace}"
 OUT="${OUT:-gui-screenshots}"
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
-export CRAFTSPACE_HOME="$(mktemp -d)" RUST_LOG=info CRAFTSPACE_TEST_NOTIFICATION=1
-LOG="$OUT/craftspace.log"
+export OKTOSPACE_HOME="$(mktemp -d)" RUST_LOG=info OKTOSPACE_TEST_NOTIFICATION=1
+LOG="$OUT/oktospace.log"
 
 fail() { echo "FAIL: $*"; echo "--- log"; cat "$LOG"; exit 1; }
 windows() { osascript -e 'tell application "System Events" to count windows of (first process whose unix id is '"$APP"')' 2>/dev/null || echo "?"; }
@@ -21,7 +21,7 @@ windows() { osascript -e 'tell application "System Events" to count windows of (
 APP=$!
 trap 'kill $APP 2>/dev/null || true' EXIT
 sleep 15
-kill -0 "$APP" 2>/dev/null || fail "CraftSpace exited"
+kill -0 "$APP" 2>/dev/null || fail "OktoSpace exited"
 screencapture -x "$OUT/macos-window.png" || echo "::warning::no screenshot (screen recording not allowed)"
 
 grep -q "tray icon ready" "$LOG" || fail "no menu bar icon"
@@ -35,7 +35,7 @@ if [ "$before" = "?" ] || [ "$before" = "0" ]; then
 else
   osascript -e 'tell application "System Events" to tell (first process whose unix id is '"$APP"') to click (first button of window 1 whose subrole is "AXCloseButton")'
   sleep 4
-  kill -0 "$APP" 2>/dev/null || fail "CraftSpace quit instead of staying in the menu bar"
+  kill -0 "$APP" 2>/dev/null || fail "OktoSpace quit instead of staying in the menu bar"
   grep -q "still running in the tray" "$LOG" || fail "no tray message in the log"
   echo "close: hidden in the menu bar (windows now: $(windows))"
   screencapture -x "$OUT/macos-in-tray.png" || true

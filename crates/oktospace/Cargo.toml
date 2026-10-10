@@ -1,0 +1,60 @@
+[package]
+name = "oktospace"
+description = "Install, update and build apps from GitHub"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+oktospace-core.workspace = true
+anyhow.workspace = true
+semver.workspace = true
+log.workspace = true
+eframe = { version = "0.36", default-features = false, features = ["default_fonts", "glow", "links", "wayland", "x11"] }
+egui_commonmark = "0.25"
+rfd = "0.15"
+open = "5"
+env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+serde_json.workspace = true
+notify-rust = "4"
+notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
+
+# wgpu: Direct3D on Windows when OpenGL 2 isn't available (no GPU driver, VMs, Remote Desktop),
+# and Metal on macOS, where OpenGL is deprecated and doesn't keep up with 120 Hz displays.
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+eframe = { version = "0.36", default-features = false, features = ["wgpu"] }
+tray-icon = "0.26"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSImage", "NSResponder"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSData"] }
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+ksni = { version = "0.3", default-features = false, features = ["async-io", "blocking"] }
+
+[build-dependencies]
+winresource = "0.1"
+
+# `cargo deb -p oktospace` (release workflow).
+[package.metadata.deb]
+name = "oktospace"
+maintainer = "OktoSpace contributors"
+copyright = "OktoSpace contributors"
+extended-description = "Installs, updates and builds apps from GitHub releases: an App library of open-source apps, checksum-verified downloads, building from source, update channels and rollback."
+section = "utils"
+# The window system libraries are loaded at run time, so they aren't found automatically.
+depends = "libgl1, libegl1, libxkbcommon0, libxkbcommon-x11-0, libx11-6, libx11-xcb1, libxcursor1, libxrandr2, libxi6, libwayland-client0"
+recommends = "policykit-1 | pkexec, fontconfig"
+assets = [
+    ["target/release/oktospace", "usr/bin/", "755"],
+    ["target/release/oktospace-cli", "usr/bin/", "755"],
+    ["../../packaging/linux/oktospace.desktop", "usr/share/applications/", "644"],
+    ["../../assets/oktospace-256.png", "usr/share/icons/hicolor/256x256/apps/oktospace.png", "644"],
+    ["../../packaging/linux/io.github.emircesur.oktospace.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["../../README.md", "usr/share/doc/oktospace/README.md", "644"],
+]

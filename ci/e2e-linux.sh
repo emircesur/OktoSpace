@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # End-to-end checks against real ArtCraft releases (Linux). Run from the repository root after
-# `cargo build -p craftspace-cli`.
+# `cargo build -p oktospace-cli`.
 set -euxo pipefail
-cli="$PWD/target/debug/craftspace-cli"
-export CRAFTSPACE_HOME="$RUNNER_TEMP/cs" XDG_DATA_HOME="$RUNNER_TEMP/xdg" XDG_BIN_HOME="$RUNNER_TEMP/bin" XDG_CONFIG_HOME="$RUNNER_TEMP/config"
-installed() { python3 -c "import json,sys; d=json.load(open('$CRAFTSPACE_HOME/installed.json')); print(d['apps']['$1']['current']['$2'] if '$1' in d['apps'] else '')"; }
+cli="$PWD/target/debug/oktospace-cli"
+export OKTOSPACE_HOME="$RUNNER_TEMP/cs" XDG_DATA_HOME="$RUNNER_TEMP/xdg" XDG_BIN_HOME="$RUNNER_TEMP/bin" XDG_CONFIG_HOME="$RUNNER_TEMP/config"
+installed() { python3 -c "import json,sys; d=json.load(open('$OKTOSPACE_HOME/installed.json')); print(d['apps']['$1']['current']['$2'] if '$1' in d['apps'] else '')"; }
 
 "$cli" list
 "$cli" info photocraft
@@ -15,7 +15,7 @@ test "$(installed photocraft version)" = "0.3.0"
 test -L "$XDG_BIN_HOME/photocraft"
 "$XDG_BIN_HOME/photocraft-cli" --version
 ls "$XDG_DATA_HOME/applications/" | grep -q photocraft
-grep -q "Exec=$CRAFTSPACE_HOME" "$XDG_DATA_HOME"/applications/*photocraft*.desktop
+grep -q "Exec=$OKTOSPACE_HOME" "$XDG_DATA_HOME"/applications/*photocraft*.desktop
 "$cli" verify photocraft
 "$cli" update photocraft
 test "$(installed photocraft version)" != "0.3.0"
@@ -54,10 +54,10 @@ test -n "$(installed gridcraft version)"
 
 # Machine policy: required apps get installed, others hidden.
 echo '{"required_apps": ["deckcraft"], "allowed_apps": ["deckcraft", "gridcraft"], "settings": {"keep_previous_version": false}}' > "$RUNNER_TEMP/policy.json"
-CRAFTSPACE_POLICY="$RUNNER_TEMP/policy.json" "$cli" apply-policy
+OKTOSPACE_POLICY="$RUNNER_TEMP/policy.json" "$cli" apply-policy
 test -n "$(installed deckcraft version)"
-test "$(CRAFTSPACE_POLICY="$RUNNER_TEMP/policy.json" "$cli" list | tail -n +2 | wc -l)" -eq 2
-if CRAFTSPACE_POLICY="$RUNNER_TEMP/policy.json" "$cli" config keep_previous_version true; then echo "policy should lock this"; exit 1; fi
+test "$(OKTOSPACE_POLICY="$RUNNER_TEMP/policy.json" "$cli" list | tail -n +2 | wc -l)" -eq 2
+if OKTOSPACE_POLICY="$RUNNER_TEMP/policy.json" "$cli" config keep_previous_version true; then echo "policy should lock this"; exit 1; fi
 
 # IT and classrooms: a lab policy (pinned version, no uninstalling, update window, reports) and a
 # shared package cache that a second computer installs from.
@@ -75,11 +75,11 @@ cat > "$lab/policy.json" <<POLICY
   "settings": { "package_cache": "$lab/share/packages", "package_cache_write": true }
 }
 POLICY
-export CRAFTSPACE_POLICY="$lab/policy.json"
+export OKTOSPACE_POLICY="$lab/policy.json"
 "$cli" policy check "$lab/policy.json"
 "$cli" policy show | tee "$lab/show.txt"
 grep -q "CI Art Lab" "$lab/show.txt"
-export CRAFTSPACE_HOME="$lab/pc1"
+export OKTOSPACE_HOME="$lab/pc1"
 "$cli" apply-policy
 test "$(installed photocraft version)" = "0.3.0"
 ls "$lab/share/packages" | grep -q "photocraft-0.3.0"
@@ -98,14 +98,14 @@ echo '{"theme":"pink"}' > "$XDG_CONFIG_HOME/PhotoCraft/settings.json"
 test ! -e "$XDG_CONFIG_HOME/PhotoCraft"
 ls -d "$XDG_CONFIG_HOME"/PhotoCraft.reset-*
 # A second computer gets the package from the share.
-export CRAFTSPACE_HOME="$lab/pc2"
+export OKTOSPACE_HOME="$lab/pc2"
 "$cli" -v apply-policy 2>&1 | tee "$lab/pc2.txt"
 grep -q "from the package cache" "$lab/pc2.txt"
 test "$(installed photocraft version)" = "0.3.0"
-unset CRAFTSPACE_POLICY
+unset OKTOSPACE_POLICY
 
 # Other sources (optional): an app from any GitHub repository.
-export CRAFTSPACE_HOME="$RUNNER_TEMP/sources"
+export OKTOSPACE_HOME="$RUNNER_TEMP/sources"
 "$cli" config prefer_system_installer false
 if "$cli" source add BurntSushi/ripgrep --binary rg; then echo "other sources are off by default"; exit 1; fi
 "$cli" source check BurntSushi/ripgrep
@@ -120,15 +120,15 @@ grep -q "BurntSushi/ripgrep" "$RUNNER_TEMP/sources.txt"
 if "$cli" source remove ripgrep; then echo "installed apps stay on the list"; exit 1; fi
 "$cli" uninstall ripgrep --yes
 "$cli" source remove ripgrep
-"$cli" source set craftspace emircesur/craftspace
-"$cli" source set craftspace official
+"$cli" source set oktospace emircesur/OktoSpace
+"$cli" source set oktospace official
 "$cli" source disable
 test -z "$("$cli" list | grep -i ripgrep || true)"
-export CRAFTSPACE_HOME="$RUNNER_TEMP/cs"
+export OKTOSPACE_HOME="$RUNNER_TEMP/cs"
 
 # Workspace sync: a PhotoCraft setup carried to another computer, only the chosen parts, keeping
 # that computer's own values; and handed out by a policy.
-export CRAFTSPACE_HOME="$RUNNER_TEMP/profiles"
+export OKTOSPACE_HOME="$RUNNER_TEMP/profiles"
 pa="$RUNNER_TEMP/pc-teacher" pb="$RUNNER_TEMP/pc-student"
 mkdir -p "$pa/Presets" "$pb"
 echo '{"workspaces":{"Painting":{"a":1}},"panelLayout":"wide","shortcuts":{"file.new":"Ctrl+Alt+N"},"general":{"theme":"dark"},"fileHandling":{"recentFiles":["/home/teacher/secret.psd"]}}' > "$pa/preferences.json"
@@ -152,21 +152,21 @@ PHOTOCRAFT_CONFIG_DIR="$pb" "$cli" profile backups photocraft | grep -q craftpro
 echo "{\"profiles\": {\"photocraft\": {\"source\": \"$RUNNER_TEMP/class.craftprofile\", \"apply\": \"every-start\"}}}" > "$RUNNER_TEMP/profile-policy.json"
 pc="$RUNNER_TEMP/pc-lab"
 mkdir -p "$pc"
-CRAFTSPACE_POLICY="$RUNNER_TEMP/profile-policy.json" PHOTOCRAFT_CONFIG_DIR="$pc" "$cli" policy check "$RUNNER_TEMP/profile-policy.json"
-CRAFTSPACE_POLICY="$RUNNER_TEMP/profile-policy.json" PHOTOCRAFT_CONFIG_DIR="$pc" "$cli" apply-policy
+OKTOSPACE_POLICY="$RUNNER_TEMP/profile-policy.json" PHOTOCRAFT_CONFIG_DIR="$pc" "$cli" policy check "$RUNNER_TEMP/profile-policy.json"
+OKTOSPACE_POLICY="$RUNNER_TEMP/profile-policy.json" PHOTOCRAFT_CONFIG_DIR="$pc" "$cli" apply-policy
 test -f "$pc/Presets/brushes-1.pcbrushes"
 grep -q '"theme": "dark"' "$pc/preferences.json"
 
-# Add-ons: CraftSpace's own packs, pinned open-source audio plug-ins, and a plug-in from the
+# Add-ons: OktoSpace's own packs, pinned open-source audio plug-ins, and a plug-in from the
 # community ArtCraft Store.
-export CRAFTSPACE_HOME="$RUNNER_TEMP/addons"
+export OKTOSPACE_HOME="$RUNNER_TEMP/addons"
 "$cli" addons list | tee "$RUNNER_TEMP/addons.txt"
-grep -q "craftspace-palettes" "$RUNNER_TEMP/addons.txt"
+grep -q "oktospace-palettes" "$RUNNER_TEMP/addons.txt"
 grep -q "artcraft-store/" "$RUNNER_TEMP/addons.txt"
-"$cli" addons install craftspace-palettes craftspace-looks
-test -f "$XDG_CONFIG_HOME/vectorcraft/Swatches/CraftSpace Earth.gpl"
-find "$HOME" -path "*CraftSpace Add-ons/CraftSpace Looks/CraftSpace Looks/Vivid.cube" | grep -q .
-# Not checked by CraftSpace: refused unless the person agrees.
+"$cli" addons install oktospace-palettes oktospace-looks
+test -f "$XDG_CONFIG_HOME/vectorcraft/Swatches/OktoSpace Earth.gpl"
+find "$HOME" -path "*OktoSpace Add-ons/OktoSpace Looks/OktoSpace Looks/Vivid.cube" | grep -q .
+# Not checked by OktoSpace: refused unless the person agrees.
 if "$cli" addons install dexed < /dev/null; then echo "an unchecked add-on installed without agreeing"; exit 1; fi
 "$cli" addons install dexed dragonfly-reverb --yes
 test -f "$HOME/.clap/Dexed.clap"
@@ -181,28 +181,28 @@ assert os.path.isfile(os.path.join(p["additionalPluginsFolder"], "photocraft_plu
 PY
 # A policy can allow only checked add-ons.
 echo '{"block_unchecked_addons": true}' > "$RUNNER_TEMP/addon-policy.json"
-if CRAFTSPACE_POLICY="$RUNNER_TEMP/addon-policy.json" "$cli" addons install six-sines --yes; then echo "the policy should block this"; exit 1; fi
-"$cli" addons remove dexed dragonfly-reverb craftspace-palettes craftspace-looks artcraft-store/org.photocraft.community.vignette
+if OKTOSPACE_POLICY="$RUNNER_TEMP/addon-policy.json" "$cli" addons install six-sines --yes; then echo "the policy should block this"; exit 1; fi
+"$cli" addons remove dexed dragonfly-reverb oktospace-palettes oktospace-looks artcraft-store/org.photocraft.community.vignette
 test ! -e "$HOME/.clap/Dexed.clap"
 test ! -e "$HOME/.vst3/Dexed.vst3"
-test ! -e "$XDG_CONFIG_HOME/vectorcraft/Swatches/CraftSpace Earth.gpl"
+test ! -e "$XDG_CONFIG_HOME/vectorcraft/Swatches/OktoSpace Earth.gpl"
 # Add-on repositories: listed apart from the registry, added by owner/repo.
 "$cli" addons repos remove artcraft-store
 if "$cli" addons list | grep -q "artcraft-store/"; then echo "a turned-off repository is still listed"; exit 1; fi
 "$cli" addons repos add akkk09/artcraft-store | tee "$RUNNER_TEMP/repo.txt"
 grep -q "ArtCraft Store (id: artcraft-store)" "$RUNNER_TEMP/repo.txt"
 "$cli" addons repos | grep -q "github.com/akkk09/artcraft-store"
-if "$cli" addons repos add emircesur/CRAFTSPACE; then echo "a repository without a catalog was added"; exit 1; fi
+if "$cli" addons repos add emircesur/OktoSpace; then echo "a repository without a catalog was added"; exit 1; fi
 "$cli" addons check addons/registry.json
 "$cli" addons repositories | grep -q "Airwindows"
-export CRAFTSPACE_HOME="$RUNNER_TEMP/cs"
+export OKTOSPACE_HOME="$RUNNER_TEMP/cs"
 
 # Start at login, self-install.
 "$cli" autostart on
-test -f "$XDG_CONFIG_HOME/autostart/craftspace.desktop"
+test -f "$XDG_CONFIG_HOME/autostart/oktospace.desktop"
 "$cli" autostart off
-test ! -f "$XDG_CONFIG_HOME/autostart/craftspace.desktop"
+test ! -f "$XDG_CONFIG_HOME/autostart/oktospace.desktop"
 "$cli" self-install
-"$XDG_BIN_HOME/craftspace-cli" --version
+"$XDG_BIN_HOME/oktospace-cli" --version
 "$cli" news | head
 echo "Linux end-to-end checks passed"
