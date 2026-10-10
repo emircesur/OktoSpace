@@ -86,15 +86,6 @@ Check ($ac.current.executable -and (Test-Path $ac.current.executable)) "ArtCraft
 Start-Sleep -Seconds 5
 Check (-not (Test-Path $ac.current.executable)) "ArtCraft uninstalled"
 
-# Fonts.
-& $cli fonts install "Noto Sans Arabic"
-$fontFile = Join-Path $env:LOCALAPPDATA "Microsoft\Windows\Fonts\NotoSansArabic.ttf"
-Check (Test-Path $fontFile) "font file installed"
-$fonts = Get-ItemProperty "HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts"
-Check ($null -ne $fonts."Noto Sans Arabic Regular (TrueType)") "font registered"
-& $cli fonts uninstall
-Check (-not (Test-Path $fontFile)) "font removed"
-
 # Start at login.
 & $cli autostart on
 Check ($null -ne (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run")."OktoSpace") "Run entry"

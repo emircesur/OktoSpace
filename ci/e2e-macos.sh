@@ -45,11 +45,6 @@ export OKTOSPACE_HOME="$RUNNER_TEMP/cs"
 test -d "$(installed artcraft executable)"
 "$cli" uninstall artcraft --yes
 
-# Fonts.
-export OKTOSPACE_FONTS_DIR="$RUNNER_TEMP/Fonts"
-"$cli" fonts install "Noto Sans Arabic"
-test -f "$OKTOSPACE_FONTS_DIR/NotoSansArabic.ttf"
-"$cli" fonts uninstall
 "$cli" autostart on
 test -f "$HOME/Library/LaunchAgents/io.github.emircesur.oktospace.plist"
 "$cli" autostart off

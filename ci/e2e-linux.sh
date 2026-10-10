@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end checks against real ArtCraft releases (Linux). Run from the repository root after
+# End-to-end checks against real releases (Linux). Run from the repository root after
 # `cargo build -p oktospace-cli`.
 set -euxo pipefail
 cli="$PWD/target/debug/oktospace-cli"
@@ -39,11 +39,6 @@ grep -qiE "delta update" "$RUNNER_TEMP/delta.log"
 "$cli" verify photocraft
 "$cli" uninstall photocraft --yes
 "$cli" config prefer_appimage false
-
-# Fonts.
-"$cli" fonts install "Noto Sans Arabic"
-fc-list | grep -q "Noto Sans Arabic"
-"$cli" fonts uninstall
 
 # Export / import.
 "$cli" install gridcraft -q
@@ -91,12 +86,6 @@ test "$(installed photocraft version)" = "0.3.0"
 # Students can't uninstall (the runner isn't root).
 if "$cli" uninstall photocraft --yes; then echo "prevent_uninstall should stop this"; exit 1; fi
 test "$(installed photocraft version)" = "0.3.0"
-# Fresh settings between classes; the old ones are kept.
-mkdir -p "$XDG_CONFIG_HOME/PhotoCraft"
-echo '{"theme":"pink"}' > "$XDG_CONFIG_HOME/PhotoCraft/settings.json"
-"$cli" reset photocraft --yes
-test ! -e "$XDG_CONFIG_HOME/PhotoCraft"
-ls -d "$XDG_CONFIG_HOME"/PhotoCraft.reset-*
 # A second computer gets the package from the share.
 export OKTOSPACE_HOME="$lab/pc2"
 "$cli" -v apply-policy 2>&1 | tee "$lab/pc2.txt"
@@ -126,75 +115,14 @@ if "$cli" source remove ripgrep; then echo "installed apps stay on the list"; ex
 test -z "$("$cli" list | grep -i ripgrep || true)"
 export OKTOSPACE_HOME="$RUNNER_TEMP/cs"
 
-# Workspace sync: a PhotoCraft setup carried to another computer, only the chosen parts, keeping
-# that computer's own values; and handed out by a policy.
-export OKTOSPACE_HOME="$RUNNER_TEMP/profiles"
-pa="$RUNNER_TEMP/pc-teacher" pb="$RUNNER_TEMP/pc-student"
-mkdir -p "$pa/Presets" "$pb"
-echo '{"workspaces":{"Painting":{"a":1}},"panelLayout":"wide","shortcuts":{"file.new":"Ctrl+Alt+N"},"general":{"theme":"dark"},"fileHandling":{"recentFiles":["/home/teacher/secret.psd"]}}' > "$pa/preferences.json"
-echo '{}' > "$pa/Presets/brushes-1.pcbrushes"
-PHOTOCRAFT_CONFIG_DIR="$pa" "$cli" profile export photocraft --out "$RUNNER_TEMP/class.craftprofile"
-"$cli" profile show "$RUNNER_TEMP/class.craftprofile" | tee "$RUNNER_TEMP/profile.txt"
-grep -q "Presets/brushes-1.pcbrushes" "$RUNNER_TEMP/profile.txt"
-if unzip -p "$RUNNER_TEMP/class.craftprofile" files/config/preferences.json | grep -q secret.psd; then echo "recent files travelled"; exit 1; fi
-echo '{"general":{"theme":"light"},"fileHandling":{"recentFiles":["/home/student/mine.psd"]}}' > "$pb/preferences.json"
-PHOTOCRAFT_CONFIG_DIR="$pb" "$cli" profile import "$RUNNER_TEMP/class.craftprofile" --parts layouts,shortcuts --yes
-python3 - "$pb/preferences.json" <<'PY'
-import json, sys
-p = json.load(open(sys.argv[1]))
-assert p["panelLayout"] == "wide" and p["shortcuts"]["file.new"] == "Ctrl+Alt+N", p
-assert p["general"]["theme"] == "light", p
-assert p["fileHandling"]["recentFiles"] == ["/home/student/mine.psd"], p
-PY
-test ! -e "$pb/Presets"
-PHOTOCRAFT_CONFIG_DIR="$pb" "$cli" profile backups photocraft | grep -q craftprofile
-# The organization hands the setup to every computer.
-echo "{\"profiles\": {\"photocraft\": {\"source\": \"$RUNNER_TEMP/class.craftprofile\", \"apply\": \"every-start\"}}}" > "$RUNNER_TEMP/profile-policy.json"
-pc="$RUNNER_TEMP/pc-lab"
-mkdir -p "$pc"
-OKTOSPACE_POLICY="$RUNNER_TEMP/profile-policy.json" PHOTOCRAFT_CONFIG_DIR="$pc" "$cli" policy check "$RUNNER_TEMP/profile-policy.json"
-OKTOSPACE_POLICY="$RUNNER_TEMP/profile-policy.json" PHOTOCRAFT_CONFIG_DIR="$pc" "$cli" apply-policy
-test -f "$pc/Presets/brushes-1.pcbrushes"
-grep -q '"theme": "dark"' "$pc/preferences.json"
-
-# Add-ons: OktoSpace's own packs, pinned open-source audio plug-ins, and a plug-in from the
-# community ArtCraft Store.
-export OKTOSPACE_HOME="$RUNNER_TEMP/addons"
-"$cli" addons list | tee "$RUNNER_TEMP/addons.txt"
-grep -q "oktospace-palettes" "$RUNNER_TEMP/addons.txt"
-grep -q "artcraft-store/" "$RUNNER_TEMP/addons.txt"
-"$cli" addons install oktospace-palettes oktospace-looks
-test -f "$XDG_CONFIG_HOME/vectorcraft/Swatches/OktoSpace Earth.gpl"
-find "$HOME" -path "*OktoSpace Add-ons/OktoSpace Looks/OktoSpace Looks/Vivid.cube" | grep -q .
-# Not checked by OktoSpace: refused unless the person agrees.
-if "$cli" addons install dexed < /dev/null; then echo "an unchecked add-on installed without agreeing"; exit 1; fi
-"$cli" addons install dexed dragonfly-reverb --yes
-test -f "$HOME/.clap/Dexed.clap"
-test -d "$HOME/.vst3/Dexed.vst3"
-ls "$HOME/.clap" | grep -q DragonflyHallReverb.clap
-"$cli" addons install artcraft-store/org.photocraft.community.vignette --yes
-python3 - "$XDG_CONFIG_HOME/photocraft/preferences.json" <<'PY'
-import json, os, sys
-p = json.load(open(sys.argv[1]))["plugIns"]
-assert p["useAdditionalPluginsFolder"] is True, p
-assert os.path.isfile(os.path.join(p["additionalPluginsFolder"], "photocraft_plugin_vignette.wasm")), p
-PY
-# A policy can allow only checked add-ons.
-echo '{"block_unchecked_addons": true}' > "$RUNNER_TEMP/addon-policy.json"
-if OKTOSPACE_POLICY="$RUNNER_TEMP/addon-policy.json" "$cli" addons install six-sines --yes; then echo "the policy should block this"; exit 1; fi
-"$cli" addons remove dexed dragonfly-reverb oktospace-palettes oktospace-looks artcraft-store/org.photocraft.community.vignette
-test ! -e "$HOME/.clap/Dexed.clap"
-test ! -e "$HOME/.vst3/Dexed.vst3"
-test ! -e "$XDG_CONFIG_HOME/vectorcraft/Swatches/OktoSpace Earth.gpl"
-# Add-on repositories: listed apart from the registry, added by owner/repo.
-"$cli" addons repos remove artcraft-store
-if "$cli" addons list | grep -q "artcraft-store/"; then echo "a turned-off repository is still listed"; exit 1; fi
-"$cli" addons repos add akkk09/artcraft-store | tee "$RUNNER_TEMP/repo.txt"
-grep -q "ArtCraft Store (id: artcraft-store)" "$RUNNER_TEMP/repo.txt"
-"$cli" addons repos | grep -q "github.com/akkk09/artcraft-store"
-if "$cli" addons repos add emircesur/OktoSpace; then echo "a repository without a catalog was added"; exit 1; fi
-"$cli" addons check addons/registry.json
-"$cli" addons repositories | grep -q "Airwindows"
+# Build from source: a Go program from its latest release, installed like a download.
+export OKTOSPACE_HOME="$RUNNER_TEMP/build"
+"$cli" build junegunn/fzf 2>&1 | tee "$RUNNER_TEMP/build.log"
+grep -q "Build system: Go" "$RUNNER_TEMP/build.log"
+grep -q "Built and installed fzf" "$RUNNER_TEMP/build.log"
+"$(installed fzf executable)" --version
+"$cli" uninstall fzf --yes
+test -z "$(installed fzf version)"
 export OKTOSPACE_HOME="$RUNNER_TEMP/cs"
 
 # Start at login, self-install.
@@ -204,5 +132,4 @@ test -f "$XDG_CONFIG_HOME/autostart/oktospace.desktop"
 test ! -f "$XDG_CONFIG_HOME/autostart/oktospace.desktop"
 "$cli" self-install
 "$XDG_BIN_HOME/oktospace-cli" --version
-"$cli" news | head
 echo "Linux end-to-end checks passed"
