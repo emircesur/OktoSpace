@@ -14,7 +14,8 @@
     <ul>
       <li>Installs per user, or as system packages through dnf or apt</li>
       <li>Checksum-verified downloads that resume, with update channels and rollback</li>
-      <li>Recent files, news, tutorials, fonts and a command line for scripts</li>
+      <li>Builds apps from source (Cargo, Go, CMake, Meson, npm and more) and installs them</li>
+      <li>Over 300 open-source apps in the App library, plus any GitHub repository</li>
     </ul>
   </description>
   <launchable type="desktop-id">oktospace.desktop</launchable>
@@ -28,6 +29,6 @@
   </screenshots>
   <content_rating type="oars-1.1"/>
   <releases>
-    <release version="0.1.0" date="2026-10-09"/>
+    <release version="0.1.0" date="2026-10-10"/>
   </releases>
 </component>
