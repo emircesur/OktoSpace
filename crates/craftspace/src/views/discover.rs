@@ -13,11 +13,7 @@ pub fn content(app: &mut CraftSpaceApp, ui: &mut Ui) {
         ui.add_space(22.0);
         whats_new(app, ui);
         ui.add_space(22.0);
-        learn(app, ui);
-        ui.add_space(22.0);
         apps_to_try(app, ui);
-        ui.add_space(22.0);
-        links(app, ui);
         ui.add_space(30.0);
     });
 }
@@ -201,50 +197,6 @@ fn excerpt(md: &str, max: usize) -> String {
     }
 }
 
-/// News and tutorials from the ArtCraft website.
-fn learn(app: &mut CraftSpaceApp, ui: &mut Ui) {
-    use craftspace_core::news::ArticleKind;
-    let p = app.palette;
-    if app.articles.is_empty() {
-        return;
-    }
-    for (kind, title, blurb) in [
-        (ArticleKind::News, "News", "From the ArtCraft blog."),
-        (ArticleKind::Tutorial, "Tutorials", "Learn the tools step by step."),
-    ] {
-        let items: Vec<_> = app.articles.iter().filter(|a| a.kind == kind).cloned().collect();
-        if items.is_empty() {
-            continue;
-        }
-        ui.label(RichText::new(title).size(18.0).strong());
-        ui.label(RichText::new(blurb).color(p.weak));
-        ui.add_space(6.0);
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0);
-            for a in items.iter().take(6) {
-                let size = Vec2::new(330.0, 112.0);
-                let tile = theme::click_area(ui, size, ("article", &a.url));
-                let hovered = ui.rect_contains_pointer(tile.rect);
-                ui.allocate_ui_with_layout(size, Layout::top_down(Align::Min), |ui| {
-                    theme::card_frame(&p, hovered).show(ui, |ui| {
-                        ui.set_width(size.x - 34.0);
-                        ui.set_height(size.y - 34.0);
-                        if let Some(d) = &a.date {
-                            ui.label(RichText::new(d).size(12.0).color(p.weak));
-                        }
-                        ui.add(egui::Label::new(RichText::new(&a.title).strong()).truncate());
-                        ui.add(egui::Label::new(RichText::new(&a.description).size(12.5).color(p.weak)).wrap());
-                    });
-                });
-                if tile.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
-                    app.actions.push(Action::OpenUrl(a.url.clone()));
-                }
-            }
-        });
-        ui.add_space(18.0);
-    }
-}
-
 fn apps_to_try(app: &mut CraftSpaceApp, ui: &mut Ui) {
     let p = app.palette;
     let to_try: Vec<AppState> = app.states.iter().filter(|s| s.installed.is_none()).cloned().collect();
@@ -288,50 +240,6 @@ fn apps_to_try(app: &mut CraftSpaceApp, ui: &mut Ui) {
             }
         }
     });
-}
-
-fn links(app: &mut CraftSpaceApp, ui: &mut Ui) {
-    let p = app.palette;
-    ui.label(RichText::new("Learn and connect").size(18.0).strong());
-    ui.add_space(6.0);
-    let catalog = app.manager.catalog();
-    // Fixed-size cards in rows, so long titles never squeeze into a narrow column.
-    let card = Vec2::new(250.0, 64.0);
-    let gap = 12.0;
-    let per_row = (((ui.available_width() + gap) / (card.x + gap)).floor() as usize).max(1);
-    for row in catalog.links.chunks(per_row) {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = gap;
-            for link in row {
-                let (rect, resp) = ui.allocate_exact_size(card, Sense::click());
-                let hovered = resp.hovered();
-                ui.painter().rect(
-                    rect,
-                    CornerRadius::same(10),
-                    if hovered { p.card_hover } else { p.card },
-                    egui::Stroke::new(1.0, p.stroke),
-                    egui::StrokeKind::Inside,
-                );
-                let mut inner = ui.new_child(
-                    egui::UiBuilder::new()
-                        .max_rect(rect.shrink2(Vec2::new(16.0, 12.0)))
-                        .layout(egui::Layout::top_down(egui::Align::Min)),
-                );
-                inner.add(
-                    egui::Label::new(RichText::new(format!("{}  ↗", link.title)).strong()).truncate().selectable(false),
-                );
-                inner.add(
-                    egui::Label::new(RichText::new(link.url.trim_start_matches("https://")).size(12.0).color(p.weak))
-                        .truncate()
-                        .selectable(false),
-                );
-                if resp.on_hover_text(&link.url).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
-                    app.actions.push(Action::OpenUrl(link.url.clone()));
-                }
-            }
-        });
-        ui.add_space(gap);
-    }
 }
 
 #[cfg(test)]

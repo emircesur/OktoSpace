@@ -19,9 +19,6 @@ pub fn sidebar(app: &mut CraftSpaceApp, ui: &mut Ui) {
     nav(app, ui, "App library", AppsView::All, Some(app.states.len()), false);
     nav(app, ui, "Updates", AppsView::Updates, (updates > 0).then_some(updates), true);
     nav(app, ui, "Installed", AppsView::Installed, Some(installed), false);
-    if !app.manager.catalog().addons.is_empty() {
-        nav(app, ui, "Fonts & add-ons", AppsView::Addons, None, false);
-    }
 
     theme::section_label(ui, &p, "Categories");
     let catalog = app.manager.catalog();
@@ -29,14 +26,6 @@ pub fn sidebar(app: &mut CraftSpaceApp, ui: &mut Ui) {
         let n = app.states.iter().filter(|s| s.app.category == cat.id).count();
         if n > 0 {
             nav(app, ui, &cat.name, AppsView::Category(cat.id.clone()), None, false);
-        }
-    }
-
-    theme::section_label(ui, &p, "Resource links");
-    for link in &catalog.links {
-        if ui.add(egui::Button::new(RichText::new(format!("↗  {}", link.title)).color(p.text)).frame(false)).clicked()
-        {
-            app.actions.push(Action::OpenUrl(link.url.clone()));
         }
     }
 
@@ -111,9 +100,7 @@ fn matches_search(s: &AppState, q: &str) -> bool {
     }
     let q = q.to_lowercase();
     let a = &s.app;
-    [&a.name, &a.id, &a.tagline, &a.description, a.like.as_deref().unwrap_or("")]
-        .iter()
-        .any(|f| f.to_lowercase().contains(&q))
+    [&a.name, &a.id, &a.tagline, &a.description, &a.repo].iter().any(|f| f.to_lowercase().contains(&q))
         || a.extensions.iter().any(|e| e.eq_ignore_ascii_case(q.trim_start_matches('.')))
 }
 
@@ -124,10 +111,6 @@ pub fn content(app: &mut CraftSpaceApp, ui: &mut Ui) {
     }
     if app.apps_view == AppsView::Updates {
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| updates(app, ui));
-        return;
-    }
-    if app.apps_view == AppsView::Addons {
-        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| super::addons::content(app, ui));
         return;
     }
     let p = app.palette;
@@ -490,28 +473,8 @@ pub fn more_menu(app: &mut CraftSpaceApp, ui: &mut Ui, s: &AppState) {
         if ui.button("Website ↗").clicked() {
             app.actions.push(Action::OpenUrl(s.app.homepage()));
         }
-        if craftspace_core::profiles::spec(&id).is_some() {
-            ui.separator();
-            if ui
-                .button("Save its setup…")
-                .on_hover_text("Layouts, shortcuts, preferences and presets, for another computer or a classroom")
-                .clicked()
-            {
-                app.actions.push(Action::OpenProfileExport(id.clone()));
-            }
-            if ui.button("Bring in a setup…").clicked() {
-                app.actions.push(Action::OpenProfileImport);
-            }
-        }
         if s.installed.is_some() {
             ui.separator();
-            if ui
-                .add_enabled(!busy, egui::Button::new("Reset settings…"))
-                .on_hover_text("Start the app with fresh settings; the old ones are kept in a backup folder")
-                .clicked()
-            {
-                app.actions.push(Action::AskReset(id.clone()));
-            }
             if !managed
                 && ui
                     .add_enabled(!busy, egui::Button::new(RichText::new("Uninstall…").color(app.palette.bad)))
@@ -624,37 +587,6 @@ fn detail(app: &mut CraftSpaceApp, ui: &mut Ui, id: &str) {
         app.actions.push(Action::GoApps(app.back_view.clone()));
     }
     ui.add_space(8.0);
-
-    // Opened a file through CraftSpace whose app isn't installed yet.
-    if let Some((_, file)) = app.pending_open.clone().filter(|(app_id, _)| app_id == id) {
-        theme::card_frame(&p, false).inner_margin(egui::Margin::same(14)).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.set_width((ui.available_width() - 240.0).max(200.0));
-                    let name = file.file_name().unwrap_or_default().to_string_lossy().into_owned();
-                    ui.label(RichText::new(format!("{name} opens in {}", s.app.name)).strong());
-                    ui.label(
-                        RichText::new(format!("Install {} and the file opens as soon as it's ready.", s.app.name))
-                            .color(p.weak),
-                    );
-                });
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if theme::pill(ui, &p, "Not now").clicked() {
-                        app.pending_open = None;
-                    }
-                    let busy = app.jobs.contains_key(id);
-                    if !busy
-                        && s.installable.is_some()
-                        && theme::primary(ui, &p, &format!("Install {}", s.app.name)).clicked()
-                    {
-                        app.actions.push(Action::Install(id.to_string(), None));
-                    }
-                });
-            });
-        });
-        ui.add_space(10.0);
-    }
 
     ui.horizontal(|ui| {
         theme::badge(ui, &s.app, 76.0);

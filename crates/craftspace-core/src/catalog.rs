@@ -25,46 +25,6 @@ pub struct Catalog {
     pub apps: Vec<AppEntry>,
     #[serde(default)]
     pub categories: Vec<Category>,
-    #[serde(default)]
-    pub links: Vec<Link>,
-    /// Fonts and other extras installed outside the apps.
-    #[serde(default)]
-    pub addons: Vec<Addon>,
-    /// The site whose news and tutorials Discover shows (it must publish a `sitemap.xml`).
-    #[serde(default)]
-    pub news_site: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Addon {
-    pub id: String,
-    pub name: String,
-    pub kind: AddonKind,
-    #[serde(default)]
-    pub description: String,
-    /// For fonts, the manifest (`family | style | file | … | sha256 | …` lines); for packs, a zip.
-    pub source: String,
-    /// What file paths in the manifest are relative to.
-    #[serde(default)]
-    pub base_url: Option<String>,
-    /// SHA-256 of `source`, for packs.
-    #[serde(default)]
-    pub sha256: Option<String>,
-    /// For packs: the app whose preferences folder receives the files.
-    #[serde(default)]
-    pub app: Option<String>,
-    /// For packs: the subfolder of the app's preferences folder, e.g. `Presets`.
-    #[serde(default)]
-    pub target: Option<String>,
-    #[serde(default)]
-    pub homepage: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub enum AddonKind {
-    Fonts,
-    PresetPack,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -80,9 +40,6 @@ pub struct AppEntry {
     pub tagline: String,
     #[serde(default)]
     pub description: String,
-    /// The well-known app this one feels like, shown as a hint ("Like Photoshop").
-    #[serde(default)]
-    pub like: Option<String>,
     pub colors: Colors,
     #[serde(default)]
     pub extensions: Vec<String>,
@@ -121,12 +78,6 @@ pub struct Colors {
 pub struct Category {
     pub id: String,
     pub name: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Link {
-    pub title: String,
-    pub url: String,
 }
 
 impl AppEntry {

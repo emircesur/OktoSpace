@@ -42,10 +42,6 @@ pub struct Settings {
     pub desktop_shortcuts: bool,
     /// Optional GitHub token, which raises the API rate limit from 60 to 5000 requests an hour.
     pub github_token: Option<String>,
-    /// Folders the Files tab looks through for documents the apps can open.
-    pub file_locations: Vec<PathBuf>,
-    /// Files pinned on the Files tab.
-    pub pinned_files: Vec<PathBuf>,
     pub theme: Theme,
     /// Fetch the app list from the CraftSpace repository so new apps appear without an update.
     pub remote_catalog: bool,
@@ -67,8 +63,6 @@ pub struct Settings {
     pub keep_running_in_tray: bool,
     /// Show system notifications for updates.
     pub notifications: bool,
-    /// The Files tab's optional features, offered the first time it opens.
-    pub files: FilesFeatures,
     /// Apps and update sources outside the ArtCraft catalog (off unless turned on).
     pub other_sources: OtherSources,
     /// A folder shared by several computers (a classroom's file share): packages are taken from
@@ -76,8 +70,6 @@ pub struct Settings {
     pub package_cache: Option<PathBuf>,
     /// Also put downloaded packages into `package_cache` for the other computers.
     pub package_cache_write: bool,
-    /// Where add-ons come from besides the CraftSpace registry.
-    pub addon_stores: AddonStores,
     /// macOS: how the Dock shows CraftSpace's icon.
     pub dock_icon: DockIcon,
 }
@@ -94,15 +86,6 @@ pub enum DockIcon {
     Color,
     /// Always macOS's style.
     System,
-}
-
-/// Add-on stores: the ones the registry suggests (on unless turned off) and ones added by hand.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-#[serde(default)]
-pub struct AddonStores {
-    /// Ids of suggested stores that are turned off.
-    pub disabled: Vec<String>,
-    pub custom: Vec<crate::addons::Store>,
 }
 
 /// Optional: apps from any GitHub repository, and other repositories (forks, mirrors, backups)
@@ -130,43 +113,6 @@ pub struct CustomApp {
     /// The program's file name, when it isn't the repository's name (`rg` for ripgrep).
     #[serde(default)]
     pub binary: Option<String>,
-}
-
-/// Optional Files tab features (Settings › Files, and the card shown the first time).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct FilesFeatures {
-    /// The user has seen the setup card (and saved or dismissed it).
-    pub setup_done: bool,
-    /// Read each app's own recent-files list and mark those files "Opened in <App>".
-    pub app_recents: bool,
-    /// Thumbnails for pictures and PSDs.
-    pub thumbnails: bool,
-    /// Show files as a grid of thumbnails instead of a list.
-    pub grid: bool,
-    /// Watch the folders, so new and changed files appear without rescanning.
-    pub watch: bool,
-    /// Look for settings left by portable copies (`PhotoCraftData`) and offer to import them.
-    pub find_portable: bool,
-    /// Portable data folders not to offer again (imported or dismissed).
-    pub portable_ignored: Vec<PathBuf>,
-    /// Open these file types (extensions) through CraftSpace, which picks the app.
-    pub open_with_craftspace: Vec<String>,
-}
-
-impl Default for FilesFeatures {
-    fn default() -> Self {
-        FilesFeatures {
-            setup_done: false,
-            app_recents: true,
-            thumbnails: true,
-            grid: false,
-            watch: true,
-            find_portable: true,
-            portable_ignored: Vec::new(),
-            open_with_craftspace: Vec::new(),
-        }
-    }
 }
 
 /// Which releases an app follows.
@@ -208,8 +154,6 @@ impl Default for Settings {
             install_dir: None,
             desktop_shortcuts: false,
             github_token: None,
-            file_locations: default_file_locations(),
-            pinned_files: Vec::new(),
             theme: Theme::Dark,
             remote_catalog: true,
             offer_self_install: true,
@@ -221,32 +165,12 @@ impl Default for Settings {
             start_at_login: false,
             keep_running_in_tray: true,
             notifications: true,
-            files: FilesFeatures::default(),
             other_sources: OtherSources::default(),
             package_cache: None,
             package_cache_write: false,
             dock_icon: DockIcon::default(),
-            addon_stores: AddonStores::default(),
         }
     }
-}
-
-fn default_file_locations() -> Vec<PathBuf> {
-    let Some(dirs) = directories::UserDirs::new() else { return Vec::new() };
-    let mut out: Vec<PathBuf> = [
-        dirs.document_dir(),
-        dirs.picture_dir(),
-        dirs.desktop_dir(),
-        dirs.download_dir(),
-        dirs.video_dir(),
-        dirs.audio_dir(),
-    ]
-    .into_iter()
-    .flatten()
-    .map(Path::to_path_buf)
-    .collect();
-    out.dedup();
-    out
 }
 
 impl Settings {

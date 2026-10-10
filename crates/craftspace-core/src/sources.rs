@@ -74,7 +74,6 @@ pub fn custom_entry(app: &CustomApp) -> AppEntry {
         category: CATEGORY.into(),
         tagline: format!("From github.com/{}", app.repo),
         description: String::new(),
-        like: None,
         colors: Colors { bg: palette[(hash % palette.len() as u32) as usize].into(), fg: "#FFFFFF".into() },
         extensions: Vec::new(),
         homepage: Some(format!("https://github.com/{}", app.repo)),

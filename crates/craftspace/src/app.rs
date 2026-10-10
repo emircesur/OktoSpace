@@ -3,15 +3,11 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::mpsc::{channel, Receiver};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use craftspace_core::files::FileEntry;
-use craftspace_core::fonts::FontFile;
 use craftspace_core::manager::{AppList, VerifyReport};
-use craftspace_core::news::Article;
 use craftspace_core::selfupdate::{self, SelfUpdate};
 use craftspace_core::settings::Channel;
 use craftspace_core::{AppState, Manager, ProgressEvent, Settings};
@@ -27,7 +23,6 @@ use crate::worker::{self, Bus, Job, JobKind, Msg};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Apps,
-    Files,
     Discover,
 }
 
@@ -38,7 +33,6 @@ pub enum AppsView {
     Installed,
     Category(String),
     Detail(String),
-    Addons,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,21 +40,6 @@ pub enum DetailTab {
     Overview,
     Versions,
     Readme,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FilesView {
-    Recent,
-    /// Files on the apps' own recent lists.
-    Opened,
-    Pinned,
-}
-
-/// A file's thumbnail: being made, made, or there is none.
-pub enum Thumb {
-    Loading,
-    Ready(egui::TextureHandle),
-    None,
 }
 
 /// Things views ask for; handled after drawing so views only need shared access.
@@ -73,16 +52,6 @@ pub enum Action {
     Update(String),
     UpdateAll,
     AskUninstall(String),
-    /// Workspace sync (see views::profile).
-    OpenProfileExport(String),
-    /// Pick a .craftprofile and show what to bring in.
-    OpenProfileImport,
-    ImportProfileFile(PathBuf),
-    ExportProfile(String, Vec<craftspace_core::profiles::Part>, PathBuf),
-    ImportProfile(PathBuf, Vec<craftspace_core::profiles::Part>),
-    /// "Reset settings…": ask, then move the app's settings aside.
-    AskReset(String),
-    Reset(String),
     /// Settings › IT & Classroom.
     SaveReport,
     FillCache,
@@ -93,14 +62,9 @@ pub enum Action {
     Launch(String, Vec<PathBuf>),
     OpenUrl(String),
     OpenPath(PathBuf),
-    Reveal(PathBuf),
     ShowApp(String),
     GoApps(AppsView),
     Refresh,
-    RescanFiles,
-    TogglePin(PathBuf),
-    AddLocation,
-    RemoveLocation(PathBuf),
     OpenSettings,
     SaveSettings(Box<Settings>),
     ApplySelfUpdate,
@@ -116,25 +80,8 @@ pub enum Action {
     RestartCraftSpace,
     /// The answer to "portable or installer?" (true: installer).
     SetInstallMode(bool),
-    /// Save the Files features (from the first-run card or the Files window).
-    SaveFilesFeatures(Box<craftspace_core::settings::FilesFeatures>),
-    /// Close the first-run card without changing anything.
-    FilesSetupLater,
-    /// Settings › Files › Choose…
-    OpenFilesSetup,
-    SetFilesGrid(bool),
-    ImportPortable(craftspace_core::app_data::PortableData),
-    DismissPortable(PathBuf),
-    CopyText(String),
     SetChannel(String, Channel),
     ReportBug(String),
-    InstallFonts(Option<String>),
-    RemoveFonts(Option<String>),
-    /// Install an add-on (asks first when CraftSpace hasn't checked it).
-    InstallAddon(String),
-    /// The person agreed to an add-on CraftSpace hasn't checked.
-    InstallAddonAnyway(String),
-    RemoveAddon(String),
     ExportList,
     ImportList,
     OpenMultiInstall,
@@ -154,29 +101,6 @@ pub struct Toast {
     pub text: String,
     pub kind: ToastKind,
     pub at: Instant,
-}
-
-pub struct FilesState {
-    pub entries: Vec<FileEntry>,
-    pub scanning: bool,
-    pub scanned: bool,
-    pub view: FilesView,
-    pub app_filter: Option<String>,
-    pub cancel: Arc<AtomicBool>,
-    pub thumbs: HashMap<PathBuf, Thumb>,
-    /// Thumbnails waiting for a worker (a few are made at a time).
-    thumb_queue: std::collections::VecDeque<PathBuf>,
-    thumbs_in_flight: usize,
-    watcher: Option<notify::RecommendedWatcher>,
-    /// A watched folder changed; rescan once things settle.
-    changed_at: Option<Instant>,
-    /// Settings left by portable copies, offered for import.
-    pub portable: Vec<craftspace_core::app_data::PortableData>,
-    portable_checked: bool,
-    /// The Files features being edited (the first-run card, or Settings › Files).
-    pub setup_draft: Option<craftspace_core::settings::FilesFeatures>,
-    /// Edit them in a window (from Settings) rather than the card.
-    pub setup_window: bool,
 }
 
 pub struct CraftSpaceApp {
@@ -216,25 +140,8 @@ pub struct CraftSpaceApp {
     /// Pinned versions queued this run (app ids).
     pinned_queued: HashSet<String>,
 
-    pub files: FilesState,
-    pub articles: Vec<Article>,
     pub readmes: HashMap<String, Result<String, String>>,
     readme_loading: HashSet<String>,
-    pub fonts: Option<Result<Vec<FontFile>, String>>,
-    /// Add-ons from the registry and stores; the page's filter; an unchecked add-on waiting for
-    /// the person to agree.
-    pub addons: Vec<craftspace_core::addons::Addon>,
-    pub addon_app: Option<String>,
-    pub addon_checked_only: bool,
-    /// The CraftSpace registry, or the add-on repositories.
-    pub addon_repos_tab: bool,
-    pub addon_repo_input: String,
-    /// Adding a repository: in progress, or what happened.
-    pub addon_repo_busy: bool,
-    pub addon_repo_status: Option<Result<String, String>>,
-    pub confirm_addon: Option<String>,
-    pub addons_requested: bool,
-    fonts_loading: bool,
     pub verify_results: HashMap<String, VerifyReport>,
     pub tours: HashMap<String, Result<craftspace_core::tour::Tour, String>>,
     tour_loading: HashSet<String>,
@@ -245,7 +152,6 @@ pub struct CraftSpaceApp {
     pub settings: Settings,
     pub settings_draft: Option<Settings>,
     pub confirm_uninstall: Option<String>,
-    pub confirm_reset: Option<String>,
     confirm_quit: bool,
     pub md_cache: CommonMarkCache,
     pub detail_release: Option<String>,
@@ -260,12 +166,9 @@ pub struct CraftSpaceApp {
     pub about_open: bool,
     /// Settings › Other sources: the add / change repository dialog.
     pub source_dialog: Option<views::sources::Dialog>,
-    pub profile_dialog: Option<views::profile::Dialog>,
     dock: crate::dock::Dock,
     /// An install waiting for the one-time "portable or installer?" answer.
     pub install_mode_pending: Option<Action>,
-    /// `craftspace open <file>` for an app that isn't installed: open it once it is.
-    pub pending_open: Option<(String, PathBuf)>,
     /// Hidden while no tray icon is showing (the panel isn't there yet, or went away).
     hidden_without_tray: Option<Instant>,
     quitting: bool,
@@ -275,12 +178,7 @@ pub struct CraftSpaceApp {
 }
 
 impl CraftSpaceApp {
-    pub fn new(
-        cc: &eframe::CreationContext<'_>,
-        manager: Manager,
-        background: bool,
-        open_request: Option<(String, PathBuf)>,
-    ) -> CraftSpaceApp {
+    pub fn new(cc: &eframe::CreationContext<'_>, manager: Manager, background: bool) -> CraftSpaceApp {
         let (tx, rx) = channel();
         let bus = Bus::new(tx, cc.egui_ctx.clone());
         let settings = manager.settings();
@@ -293,7 +191,6 @@ impl CraftSpaceApp {
         worker::heartbeat(cc.egui_ctx.clone());
         let mut app = CraftSpaceApp {
             states: manager.states(),
-            articles: manager.cached_articles(),
             bus,
             rx,
             palette,
@@ -318,36 +215,8 @@ impl CraftSpaceApp {
             self_update_ready: None,
             required_queued: false,
             pinned_queued: Default::default(),
-            files: FilesState {
-                entries: Vec::new(),
-                scanning: false,
-                scanned: false,
-                view: FilesView::Recent,
-                app_filter: None,
-                cancel: Arc::new(AtomicBool::new(false)),
-                thumbs: HashMap::new(),
-                thumb_queue: Default::default(),
-                thumbs_in_flight: 0,
-                watcher: None,
-                changed_at: None,
-                portable: Vec::new(),
-                portable_checked: false,
-                setup_draft: None,
-                setup_window: false,
-            },
             readmes: HashMap::new(),
             readme_loading: HashSet::new(),
-            fonts: None,
-            fonts_loading: false,
-            addons: Vec::new(),
-            addon_app: None,
-            addon_checked_only: false,
-            addon_repos_tab: false,
-            addon_repo_input: String::new(),
-            addon_repo_busy: false,
-            addon_repo_status: None,
-            confirm_addon: None,
-            addons_requested: false,
             verify_results: HashMap::new(),
             tours: HashMap::new(),
             tour_loading: HashSet::new(),
@@ -357,7 +226,6 @@ impl CraftSpaceApp {
             settings,
             settings_draft: None,
             confirm_uninstall: None,
-            confirm_reset: None,
             confirm_quit: false,
             md_cache: CommonMarkCache::default(),
             detail_release: None,
@@ -367,10 +235,8 @@ impl CraftSpaceApp {
             tray,
             tray_rx,
             hidden: false,
-            pending_open: None,
             about_open: false,
             source_dialog: None,
-            profile_dialog: None,
             dock: Default::default(),
             install_mode_pending: None,
             hidden_without_tray: None,
@@ -391,19 +257,13 @@ impl CraftSpaceApp {
                 cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
             }
         }
-        // `CRAFTSPACE_VIEW=files|discover|updates|installed|addons|app:<id>` opens a specific
+        // `CRAFTSPACE_VIEW=discover|updates|installed|app:<id>` opens a specific
         // page (handy for screenshots and for jumping straight somewhere from a shortcut).
         if let Ok(view) = std::env::var("CRAFTSPACE_VIEW") {
             match view.as_str() {
-                "files" => app.tab = Tab::Files,
                 "discover" => app.tab = Tab::Discover,
                 "updates" => app.apps_view = AppsView::Updates,
                 "installed" => app.apps_view = AppsView::Installed,
-                "addons" => app.apps_view = AppsView::Addons,
-                "addon-repos" => {
-                    app.apps_view = AppsView::Addons;
-                    app.addon_repos_tab = true;
-                }
                 "about" => app.about_open = true,
                 other => {
                     if let Some(rest) = other.strip_prefix("app:") {
@@ -417,11 +277,6 @@ impl CraftSpaceApp {
                     }
                 }
             }
-        }
-        if let Some((id, file)) = open_request {
-            app.apps_view = AppsView::Detail(id.clone());
-            app.detail_tab = DetailTab::Overview;
-            app.pending_open = Some((id, file));
         }
         if std::env::var_os("CRAFTSPACE_TEST_NOTIFICATION").is_some() {
             worker::test_notification(&app.bus);
@@ -440,38 +295,6 @@ impl CraftSpaceApp {
         self.refreshing = true;
         self.last_check = Some(Instant::now());
         worker::refresh(&self.bus, &self.manager, force, manual);
-    }
-
-    /// Make CraftSpace the opener for the chosen file types (or stop being it).
-    fn register_file_types(&mut self) {
-        let types = self.settings.files.open_with_craftspace.clone();
-        match self.manager.register_file_types(&types) {
-            Ok(r) if types.is_empty() => {
-                let _ = r;
-                self.toast(ToastKind::Info, "File types open in their apps directly again");
-            }
-            Ok(r) => {
-                let n = r.types;
-                match r.confirm_url {
-                    Some(url) => {
-                        self.toast(
-                            ToastKind::Info,
-                            format!("CraftSpace can open {n} file type{}. Windows asks you to confirm: choose CraftSpace for them in Default apps.", if n == 1 { "" } else { "s" }),
-                        );
-                        let _ = open::that_detached(url);
-                    }
-                    None => self.toast(
-                        ToastKind::Success,
-                        format!("CraftSpace now opens {n} file type{} in the right app", if n == 1 { "" } else { "s" }),
-                    ),
-                }
-            }
-            Err(err) => self.toast(ToastKind::Error, format!("Couldn't set up file types: {err:#}")),
-        }
-    }
-
-    pub fn files_watching(&self) -> bool {
-        self.files.watcher.is_some()
     }
 
     fn tray_shown(&self) -> bool {
@@ -570,11 +393,6 @@ impl CraftSpaceApp {
                     self.jobs.remove(&key);
                     self.job_order.retain(|k| *k != key);
                     reload = true;
-                    if result.is_ok() && self.pending_open.as_ref().is_some_and(|(id, _)| *id == key) {
-                        if let Some((id, file)) = self.pending_open.take() {
-                            self.actions.push(Action::Launch(id, vec![file]));
-                        }
-                    }
                     match result {
                         Ok(text) => self.announce(ctx, ToastKind::Success, text),
                         Err(text) if text == "Cancelled" => self.toast(ToastKind::Info, "Cancelled"),
@@ -598,14 +416,9 @@ impl CraftSpaceApp {
                     self.after_refresh(ctx, manual);
                 }
                 Msg::Icons(ids) => theme::load_icons(ctx, &self.manager, Some(&ids)),
-                Msg::Articles(articles) => self.articles = articles,
                 Msg::Readme(id, result) => {
                     self.readme_loading.remove(&id);
                     self.readmes.insert(id, result);
-                }
-                Msg::Fonts(result) => {
-                    self.fonts_loading = false;
-                    self.fonts = Some(result);
                 }
                 Msg::Verified(id, result) => match result {
                     Ok(report) if report.is_ok() => {
@@ -638,33 +451,6 @@ impl CraftSpaceApp {
                     let texture = result.map(|img| ctx.load_texture(url.clone(), img, egui::TextureOptions::LINEAR));
                     self.shots.insert(url, texture);
                 }
-                Msg::Files(entries) => {
-                    self.files.entries = entries;
-                    self.files.scanning = false;
-                    self.files.scanned = true;
-                }
-                Msg::FilesChanged => {
-                    self.files.changed_at.get_or_insert_with(Instant::now);
-                }
-                Msg::Thumb(path, image) => {
-                    self.files.thumbs_in_flight = self.files.thumbs_in_flight.saturating_sub(1);
-                    let thumb = match image {
-                        Some(img) => Thumb::Ready(ctx.load_texture(
-                            format!("thumb:{}", path.display()),
-                            img,
-                            egui::TextureOptions::LINEAR,
-                        )),
-                        None => Thumb::None,
-                    };
-                    self.files.thumbs.insert(path, thumb);
-                    self.pump_thumbs();
-                }
-                Msg::Portable(found) => self.files.portable = found,
-                Msg::Imported(id, result) => match result {
-                    Ok(text) => self.toast(ToastKind::Success, text),
-                    Err(err) => self
-                        .toast(ToastKind::Error, format!("Couldn't import {}'s settings: {err}", self.app_name(&id))),
-                },
                 Msg::SelfUpdateFound(found) => {
                     let found = found.map(|b| *b).filter(|u| self.self_update_ready.as_ref() != Some(&u.version));
                     self.self_update = found;
@@ -716,35 +502,6 @@ impl CraftSpaceApp {
                         );
                     }
                     Err(err) => log::warn!("couldn't apply the new policy: {err:#}"),
-                },
-                Msg::Addons(list) => self.addons = list,
-                Msg::AddonRepo(result) => {
-                    self.addon_repo_busy = false;
-                    // The repository is saved in the settings.
-                    self.settings = self.manager.settings();
-                    if result.is_ok() {
-                        self.addon_repo_input.clear();
-                    }
-                    self.addon_repo_status = Some(result);
-                }
-                Msg::ProfileDone(result) => {
-                    self.profile_dialog = None;
-                    match result {
-                        Ok(text) => self.announce(ctx, ToastKind::Success, text),
-                        Err(text) => self.toast(ToastKind::Error, text),
-                    }
-                }
-                Msg::PolicyProfiles(results) => {
-                    for (id, result) in results {
-                        match result {
-                            Ok(text) => self.toast(ToastKind::Info, text),
-                            Err(text) => self.toast(ToastKind::Error, format!("{}: {text}", self.app_name(&id))),
-                        }
-                    }
-                }
-                Msg::ResetDone(id, result) => match result {
-                    Ok(text) => self.announce(ctx, ToastKind::Success, text),
-                    Err(text) => self.toast(ToastKind::Error, format!("Couldn't reset {}: {text}", self.app_name(&id))),
                 },
                 Msg::CacheFilled(result) => match result {
                     Ok(text) => self.toast(ToastKind::Success, text),
@@ -858,15 +615,7 @@ impl CraftSpaceApp {
         if self.jobs.contains_key(key) {
             return;
         }
-        let label = match &kind {
-            JobKind::InstallFonts(Some(f)) | JobKind::RemoveFonts(Some(f)) => f.clone(),
-            JobKind::InstallFonts(None) | JobKind::RemoveFonts(None) => "Fonts".into(),
-            JobKind::InstallAddon(_) | JobKind::RemoveAddon => {
-                let id = key.trim_start_matches("addons:");
-                self.addons.iter().find(|a| a.id == id).map(|a| a.name.clone()).unwrap_or_else(|| id.to_string())
-            }
-            _ => self.app_name(key),
-        };
+        let label = self.app_name(key);
         let mut job = Job::new(kind, label);
         job.location = location;
         self.jobs.insert(key.to_string(), job);
@@ -923,71 +672,6 @@ impl CraftSpaceApp {
         }
     }
 
-    /// Open the Files tab: the cached list right away, a fresh scan, the folder watcher and the
-    /// portable-settings search.
-    pub fn files_opened(&mut self) {
-        if !self.files.scanned && !self.files.scanning {
-            if self.files.entries.is_empty() {
-                if let Some(cached) = self.manager.cached_files() {
-                    self.files.entries = cached;
-                }
-            }
-            self.start_file_scan();
-        }
-        self.update_watcher();
-        if self.settings.files.find_portable && !self.files.portable_checked {
-            self.files.portable_checked = true;
-            worker::find_portable(&self.bus, &self.manager);
-        }
-    }
-
-    /// Start or stop watching the Files folders to match the settings.
-    fn update_watcher(&mut self) {
-        self.files.watcher = None;
-        if self.settings.files.watch {
-            self.files.watcher = worker::watch_files(&self.bus, &self.manager);
-        }
-    }
-
-    /// Ask for the thumbnail of `path` (shown once it's made).
-    pub fn want_thumb(&mut self, path: &std::path::Path) {
-        if !self.settings.files.thumbnails || self.files.thumbs.contains_key(path) {
-            return;
-        }
-        // Keep memory in check on huge folders: thumbnails reload quickly from the disk cache.
-        if self.files.thumbs.len() > 800 {
-            self.files.thumbs.retain(|_, t| matches!(t, Thumb::Loading));
-        }
-        self.files.thumbs.insert(path.to_path_buf(), Thumb::Loading);
-        self.files.thumb_queue.push_back(path.to_path_buf());
-        self.pump_thumbs();
-    }
-
-    fn pump_thumbs(&mut self) {
-        while self.files.thumbs_in_flight < 4 {
-            let Some(path) = self.files.thumb_queue.pop_back() else { break };
-            self.files.thumbs_in_flight += 1;
-            worker::fetch_thumb(&self.bus, &self.manager, path);
-        }
-    }
-
-    /// Rescan a moment after the last change in a watched folder.
-    fn rescan_if_changed(&mut self) {
-        if let Some(at) = self.files.changed_at {
-            if at.elapsed() >= Duration::from_millis(1500) && !self.files.scanning {
-                self.files.changed_at = None;
-                self.start_file_scan();
-            }
-        }
-    }
-
-    pub fn start_file_scan(&mut self) {
-        self.files.cancel.store(true, Ordering::Relaxed);
-        self.files.cancel = Arc::new(AtomicBool::new(false));
-        self.files.scanning = true;
-        worker::scan_files(&self.bus, &self.manager, self.files.cancel.clone());
-    }
-
     pub fn ensure_readme(&mut self, id: &str) {
         if !self.readmes.contains_key(id) && self.readme_loading.insert(id.to_string()) {
             worker::fetch_readme(&self.bus, &self.manager, id);
@@ -1006,20 +690,7 @@ impl CraftSpaceApp {
         }
     }
 
-    pub fn ensure_fonts(&mut self, addon: &str) {
-        if self.fonts.is_none() && !self.fonts_loading {
-            self.fonts_loading = true;
-            worker::fetch_fonts(&self.bus, &self.manager, addon);
-        }
-    }
-
     fn save_settings(&mut self, settings: Settings) {
-        let old_files = self.settings.files.clone();
-        let files_changed = settings.files != old_files;
-        let rescan = settings.file_locations != self.settings.file_locations
-            || settings.files.app_recents != old_files.app_recents;
-        let rewatch = rescan || settings.files.watch != old_files.watch;
-        let types_changed = settings.files.open_with_craftspace != old_files.open_with_craftspace;
         let refetch = settings.include_prereleases != self.settings.include_prereleases
             || settings.prefer_system_installer != self.settings.prefer_system_installer
             || settings.github_token != self.settings.github_token;
@@ -1028,29 +699,6 @@ impl CraftSpaceApp {
             Ok(()) => {
                 self.settings = self.manager.settings();
                 self.reload_states();
-                if rescan && self.files.scanned {
-                    self.start_file_scan();
-                }
-                if files_changed {
-                    if rewatch && (self.files.scanned || self.files.watcher.is_some()) {
-                        self.update_watcher();
-                    }
-                    if !self.settings.files.thumbnails {
-                        self.files.thumbs.clear();
-                        self.files.thumb_queue.clear();
-                    }
-                    if self.settings.files.find_portable && !old_files.find_portable {
-                        self.files.portable_checked = false;
-                        if self.tab == Tab::Files {
-                            self.files_opened();
-                        }
-                    } else if !self.settings.files.find_portable {
-                        self.files.portable.clear();
-                    }
-                }
-                if types_changed {
-                    self.register_file_types();
-                }
                 if refetch {
                     self.start_refresh(true, false);
                 }
@@ -1125,39 +773,6 @@ impl CraftSpaceApp {
                     }
                 }
                 Action::AskUninstall(id) => self.confirm_uninstall = Some(id),
-                Action::AskReset(id) => self.confirm_reset = Some(id),
-                Action::InstallAddon(id) => {
-                    let checked = self.addons.iter().find(|a| a.id == id).is_some_and(|a| a.checked());
-                    if checked {
-                        self.start_job(&format!("addons:{id}"), JobKind::InstallAddon(false));
-                    } else {
-                        self.confirm_addon = Some(id);
-                    }
-                }
-                Action::InstallAddonAnyway(id) => self.start_job(&format!("addons:{id}"), JobKind::InstallAddon(true)),
-                Action::RemoveAddon(id) => self.start_job(&format!("addons:{id}"), JobKind::RemoveAddon),
-                Action::OpenProfileExport(id) => match self.manager.profile_parts(&id) {
-                    Ok((parts, note)) => self.profile_dialog = Some(views::profile::Dialog::export(id, parts, note)),
-                    Err(err) => self.toast(ToastKind::Error, format!("{err:#}")),
-                },
-                Action::OpenProfileImport => {
-                    if let Some(file) = rfd::FileDialog::new()
-                        .set_title("Bring in a setup")
-                        .add_filter("CraftSpace profile", &[craftspace_core::profiles::EXTENSION])
-                        .pick_file()
-                    {
-                        self.actions.push(Action::ImportProfileFile(file));
-                    }
-                }
-                Action::ImportProfileFile(file) => match craftspace_core::profiles::read_manifest(&file) {
-                    Ok(manifest) => self.profile_dialog = Some(views::profile::Dialog::import(file, manifest)),
-                    Err(err) => self.toast(ToastKind::Error, format!("{err:#}")),
-                },
-                Action::ExportProfile(id, parts, out) => {
-                    worker::export_profile(&self.bus, &self.manager, &id, parts, out)
-                }
-                Action::ImportProfile(file, parts) => worker::import_profile(&self.bus, &self.manager, file, parts),
-                Action::Reset(id) => worker::reset_app(&self.bus, &self.manager, &id),
                 Action::SaveReport => {
                     let report = self.manager.report();
                     let name = format!("craftspace-report-{}.json", report["computer"].as_str().unwrap_or("computer"));
@@ -1221,7 +836,6 @@ impl CraftSpaceApp {
                         self.toast(ToastKind::Error, format!("Couldn't open {}: {err}", path.display()));
                     }
                 }
-                Action::Reveal(path) => reveal(&path),
                 Action::ShowApp(id) => {
                     if !matches!(self.apps_view, AppsView::Detail(_)) {
                         self.back_view = self.apps_view.clone();
@@ -1236,46 +850,15 @@ impl CraftSpaceApp {
                     self.apps_view = view;
                 }
                 Action::Refresh => self.start_refresh(true, true),
-                Action::RescanFiles => self.start_file_scan(),
-                Action::TogglePin(path) => {
-                    let mut s = self.settings.clone();
-                    if let Some(i) = s.pinned_files.iter().position(|p| *p == path) {
-                        s.pinned_files.remove(i);
-                    } else {
-                        s.pinned_files.insert(0, path);
-                    }
-                    self.save_settings(s);
-                }
-                Action::AddLocation => {
-                    if let Some(dir) = rfd::FileDialog::new().set_title("Add a folder to Files").pick_folder() {
-                        let mut s = self.settings.clone();
-                        if !s.file_locations.contains(&dir) {
-                            s.file_locations.push(dir);
-                            self.save_settings(s);
-                            self.start_file_scan();
-                        }
-                    }
-                }
-                Action::RemoveLocation(dir) => {
-                    let mut s = self.settings.clone();
-                    s.file_locations.retain(|d| *d != dir);
-                    self.save_settings(s);
-                    self.start_file_scan();
-                }
                 Action::OpenSettings => self.settings_draft = Some(self.settings.clone()),
                 Action::SaveSettings(mut s) => {
                     // The Settings window doesn't edit these (its own window does, maybe while
                     // Settings is open), so keep what's saved.
-                    s.files = self.settings.files.clone();
                     // Its dialog changes the lists; Settings only turns them on or off.
                     let enabled = s.other_sources.enabled;
                     s.other_sources = self.settings.other_sources.clone();
                     s.other_sources.enabled = enabled;
-                    let stores_changed = s.addon_stores != self.settings.addon_stores;
                     self.save_settings(*s);
-                    if stores_changed {
-                        worker::refresh_addons(&self.bus, &self.manager);
-                    }
                 }
                 Action::ApplySelfUpdate => {
                     if let Some(update) = self.self_update.clone() {
@@ -1336,50 +919,11 @@ impl CraftSpaceApp {
                         self.actions.push(next);
                     }
                 }
-                Action::SaveFilesFeatures(features) => {
-                    let mut s = self.settings.clone();
-                    s.files = *features;
-                    s.files.setup_done = true;
-                    self.files.setup_draft = None;
-                    self.files.setup_window = false;
-                    self.save_settings(s);
-                }
-                Action::FilesSetupLater => {
-                    let mut s = self.settings.clone();
-                    s.files.setup_done = true;
-                    self.files.setup_draft = None;
-                    self.save_settings(s);
-                    self.toast(ToastKind::Info, "You can change the Files features any time in Settings › Files");
-                }
-                Action::OpenFilesSetup => {
-                    self.files.setup_draft = Some(self.settings.files.clone());
-                    self.files.setup_window = true;
-                }
-                Action::SetFilesGrid(grid) => {
-                    let mut s = self.settings.clone();
-                    s.files.grid = grid;
-                    self.save_settings(s);
-                }
-                Action::ImportPortable(found) => {
-                    self.files.portable.retain(|p| p.dir != found.dir);
-                    worker::import_portable(&self.bus, &self.manager, found);
-                }
-                Action::DismissPortable(dir) => {
-                    self.files.portable.retain(|p| p.dir != dir);
-                    if let Err(err) = self.manager.forget_portable(&dir) {
-                        self.toast(ToastKind::Error, format!("{err:#}"));
-                    }
-                    self.settings = self.manager.settings();
-                }
                 Action::Cleanup => match self.manager.cleanup() {
                     Ok(freed) => self
                         .toast(ToastKind::Success, format!("Freed {}", craftspace_core::download::format_bytes(freed))),
                     Err(err) => self.toast(ToastKind::Error, format!("{err:#}")),
                 },
-                Action::CopyText(text) => {
-                    ctx.copy_text(text);
-                    self.toast(ToastKind::Info, "Copied");
-                }
                 Action::SetChannel(id, channel) => {
                     let mut s = self.settings.clone();
                     if channel == Channel::Default {
@@ -1392,22 +936,6 @@ impl CraftSpaceApp {
                 Action::ReportBug(id) => {
                     if let Some(url) = self.manager.bug_report_url(&id) {
                         ctx.open_url(egui::OpenUrl::new_tab(url));
-                    }
-                }
-                Action::InstallFonts(family) => {
-                    if let Some(addon) = self.font_addon_id() {
-                        self.start_job(
-                            &format!("addon:{addon}:{}", family.as_deref().unwrap_or("*")),
-                            JobKind::InstallFonts(family),
-                        );
-                    }
-                }
-                Action::RemoveFonts(family) => {
-                    if let Some(addon) = self.font_addon_id() {
-                        self.start_job(
-                            &format!("addon:{addon}:{}", family.as_deref().unwrap_or("*")),
-                            JobKind::RemoveFonts(family),
-                        );
                     }
                 }
                 Action::ExportList => {
@@ -1464,15 +992,6 @@ impl CraftSpaceApp {
         }
     }
 
-    pub fn font_addon_id(&self) -> Option<String> {
-        self.manager
-            .catalog()
-            .addons
-            .into_iter()
-            .find(|a| a.kind == craftspace_core::catalog::AddonKind::Fonts)
-            .map(|a| a.id)
-    }
-
     fn handle_tray(&mut self, ctx: &egui::Context) {
         while let Ok(cmd) = self.tray_rx.try_recv() {
             match cmd {
@@ -1510,13 +1029,9 @@ impl CraftSpaceApp {
                 self.actions.push(Action::GoApps(AppsView::All));
             }
             ui.add_space(18.0);
-            for (tab, label) in [(Tab::Apps, "Apps"), (Tab::Files, "Files"), (Tab::Discover, "Discover")] {
-                let r = theme::tab(ui, &p, label, self.tab == tab);
-                if r.clicked() {
+            for (tab, label) in [(Tab::Apps, "Apps"), (Tab::Discover, "Discover")] {
+                if theme::tab(ui, &p, label, self.tab == tab).clicked() {
                     self.tab = tab;
-                    if tab == Tab::Files {
-                        self.files_opened();
-                    }
                 }
             }
 
@@ -1531,13 +1046,6 @@ impl CraftSpaceApp {
                     }
                     if ui.add_enabled(!self.refreshing, egui::Button::new("Check for updates")).clicked() {
                         self.actions.push(Action::Refresh);
-                    }
-                    if ui
-                        .button("Bring in an app's setup…")
-                        .on_hover_text("Layouts, shortcuts, preferences and presets saved from another computer")
-                        .clicked()
-                    {
-                        self.actions.push(Action::OpenProfileImport);
                     }
                     ui.separator();
                     if ui.button("About CraftSpace").clicked() {
@@ -1582,10 +1090,7 @@ impl CraftSpaceApp {
                     self.managed_chip(ui);
                 }
                 ui.add_space(12.0);
-                let hint = match self.tab {
-                    Tab::Files => "Search files",
-                    _ => "Search ArtCraft apps",
-                };
+                let hint = "Search apps";
                 ui.add(
                     egui::TextEdit::singleline(&mut self.search)
                         .hint_text(format!("🔍  {hint}"))
@@ -1728,33 +1233,6 @@ impl CraftSpaceApp {
             }
         }
 
-        if let Some(id) = self.confirm_addon.clone() {
-            views::addons::confirm(self, ctx, &id);
-        }
-
-        if let Some(id) = self.confirm_reset.clone() {
-            let name = self.app_name(&id);
-            let modal = egui::Modal::new(egui::Id::new("confirm-reset")).show(ctx, |ui| {
-                ui.set_width(420.0);
-                ui.heading(format!("Reset {name}'s settings?"));
-                ui.add_space(6.0);
-                ui.label(RichText::new(format!("{name} starts as if it were just installed: preferences, layouts and recent files are moved to a backup folder next to them, so nothing is deleted. Your documents aren't touched.")).color(p.weak));
-                ui.add_space(14.0);
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if danger_button(ui, &p, "Reset").clicked() {
-                        self.actions.push(Action::Reset(id.clone()));
-                        ui.close();
-                    }
-                    if theme::pill(ui, &p, "Cancel").clicked() {
-                        ui.close();
-                    }
-                });
-            });
-            if modal.should_close() {
-                self.confirm_reset = None;
-            }
-        }
-
         if let Some((id, kind)) = self.running_prompt.clone() {
             let name = self.app_name(&id);
             let managed = self.manager.installed_app(&id).is_some_and(|i| i.current.kind.is_managed());
@@ -1823,10 +1301,8 @@ impl CraftSpaceApp {
         }
 
         views::settings::window(self, ctx);
-        views::files::setup_window(self, ctx);
         views::about::window(self, ctx);
         views::sources::window(self, ctx);
-        views::profile::window(self, ctx);
         views::install_mode::window(self, ctx);
     }
 }
@@ -1862,10 +1338,6 @@ impl eframe::App for CraftSpaceApp {
             worker::withdraw_notifications();
         }
         self.was_focused = focused;
-        self.rescan_if_changed();
-        if self.files.changed_at.is_some() {
-            ctx.request_repaint_after(Duration::from_millis(500));
-        }
         self.keep_findable(ctx);
         if self.settings.auto_check_updates {
             let every = Duration::from_secs(u64::from(self.settings.check_interval_hours.max(1)) * 3600);
@@ -1932,7 +1404,6 @@ impl eframe::App for CraftSpaceApp {
                 .show(ui, |ui| {
                     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| match self.tab {
                         Tab::Apps => views::apps::sidebar(self, ui),
-                        Tab::Files => views::files::sidebar(self, ui),
                         Tab::Discover => {}
                     });
                 });
@@ -1942,7 +1413,6 @@ impl eframe::App for CraftSpaceApp {
             .frame(Frame::new().fill(p.bg).inner_margin(Margin { left: 28, right: 20, top: 20, bottom: 0 }))
             .show(ui, |ui| match self.tab {
                 Tab::Apps => views::apps::content(self, ui),
-                Tab::Files => views::files::content(self, ui),
                 Tab::Discover => views::discover::content(self, ui),
             });
 
@@ -1958,7 +1428,6 @@ impl eframe::App for CraftSpaceApp {
         for job in self.jobs.values() {
             job.cancel.store(true, Ordering::Relaxed);
         }
-        self.files.cancel.store(true, Ordering::Relaxed);
     }
 }
 
@@ -1984,25 +1453,6 @@ fn launcher_path(manager: &Manager) -> PathBuf {
         installed
     } else {
         current
-    }
-}
-
-/// Show a file in the system file manager.
-fn reveal(path: &std::path::Path) {
-    #[cfg(windows)]
-    {
-        let mut arg = std::ffi::OsString::from("/select,");
-        arg.push(path);
-        let _ = std::process::Command::new("explorer").arg(arg).spawn();
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let _ = std::process::Command::new("open").arg("-R").arg(path).spawn();
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        let dir = if path.is_dir() { path } else { path.parent().unwrap_or(path) };
-        let _ = open::that_detached(dir);
     }
 }
 

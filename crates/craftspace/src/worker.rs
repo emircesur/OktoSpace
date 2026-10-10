@@ -1,15 +1,12 @@
 //! Background work. Each long operation runs on its own thread and reports back over a channel;
 //! the UI drains the channel every frame (and while hidden in the tray, on each wake-up).
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
 use craftspace_core::download::{format_bytes, is_cancelled};
-use craftspace_core::files::FileEntry;
-use craftspace_core::fonts::FontFile;
 use craftspace_core::manager::VerifyReport;
-use craftspace_core::news::Article;
 use craftspace_core::selfupdate::{self, SelfUpdate};
 use craftspace_core::{Manager, Progress, ProgressEvent, Stage};
 use eframe::egui;
@@ -22,20 +19,14 @@ pub enum JobKind {
     Uninstall,
     Rollback,
     Repair,
-    InstallFonts(Option<String>),
-    RemoveFonts(Option<String>),
-    /// An add-on from the registry or a store (key `addons:<id>`); `true` when the person agreed
-    /// to an add-on CraftSpace hasn't checked.
-    InstallAddon(bool),
-    RemoveAddon,
 }
 
 impl JobKind {
     pub fn verb(&self) -> &'static str {
         match self {
-            JobKind::Install(_) | JobKind::InstallFonts(_) | JobKind::InstallAddon(_) => "Installing",
+            JobKind::Install(_) => "Installing",
             JobKind::Update => "Updating",
-            JobKind::Uninstall | JobKind::RemoveFonts(_) | JobKind::RemoveAddon => "Removing",
+            JobKind::Uninstall => "Removing",
             JobKind::Rollback => "Rolling back",
             JobKind::Repair => "Repairing",
         }
@@ -99,34 +90,18 @@ pub enum Msg {
         manual: bool,
     },
     Icons(Vec<String>),
-    Articles(Vec<Article>),
     Readme(String, Result<String, String>),
-    Fonts(Result<Vec<FontFile>, String>),
     Verified(String, Result<VerifyReport, String>),
     Tour(String, Result<craftspace_core::tour::Tour, String>),
     Shot(String, Result<egui::ColorImage, String>),
-    Files(Vec<FileEntry>),
-    /// Something changed in a watched folder.
-    FilesChanged,
-    Thumb(std::path::PathBuf, Option<egui::ColorImage>),
-    Portable(Vec<craftspace_core::app_data::PortableData>),
-    Imported(String, Result<String, String>),
     SelfUpdateFound(Option<Box<SelfUpdate>>),
     SelfUpdateDone(Result<String, String>),
     TestNotification(Result<(), String>),
     SourceChecked(Result<craftspace_core::sources::SourceCheck, String>),
     /// An add/remove/change of other sources finished (message for the user).
     SourceDone(Result<String, String>),
-    ProfileDone(Result<String, String>),
-    /// Workspace profiles from the policy: (app id, what happened).
-    PolicyProfiles(Vec<(String, Result<String, String>)>),
-    /// Add-ons from the registry and stores (after fetching them).
-    Addons(Vec<craftspace_core::addons::Addon>),
-    /// An add-on repository was added (its name), or why not.
-    AddonRepo(Result<String, String>),
     /// The organization's central policy changed (reopen the manager).
     PolicyChanged,
-    ResetDone(String, Result<String, String>),
     CacheFilled(Result<String, String>),
     /// Apps found on this computer and adopted: (name, version).
     Adopted(Vec<(String, Option<Version>)>),
@@ -193,32 +168,6 @@ pub fn start(bus: &Bus, manager: &Manager, key: &str, job: &Job) {
             }
             JobKind::Rollback => manager.rollback(&key).map(|r| format!("{name} is back on {}", r.current.version)),
             JobKind::Uninstall => manager.uninstall(&key).map(|()| format!("{name} was uninstalled")),
-            JobKind::InstallFonts(family) => {
-                let addon = key.trim_start_matches("addon:").split(':').next().unwrap_or_default().to_string();
-                manager.install_fonts(&addon, family.as_deref(), &progress).map(|n| {
-                    format!(
-                        "Installed {} ({n} file{})",
-                        family.as_deref().unwrap_or("the fonts"),
-                        if n == 1 { "" } else { "s" }
-                    )
-                })
-            }
-            JobKind::InstallAddon(accept) => {
-                let id = key.trim_start_matches("addons:");
-                manager.install_addon(id, *accept, &progress).map(|r| {
-                    let mut text = format!("{name} is installed");
-                    if let Some(note) = r.notes.last() {
-                        text.push_str(&format!(". {note}"));
-                    }
-                    text
-                })
-            }
-            JobKind::RemoveAddon => {
-                manager.uninstall_addon(key.trim_start_matches("addons:")).map(|_| format!("{name} was removed"))
-            }
-            JobKind::RemoveFonts(family) => manager
-                .uninstall_fonts(family.as_deref())
-                .map(|n| format!("Removed {n} font file{}", if n == 1 { "" } else { "s" })),
         };
         let result = result.map_err(|err| {
             if is_cancelled(&err) {
@@ -232,17 +181,13 @@ pub fn start(bus: &Bus, manager: &Manager, key: &str, job: &Job) {
     });
 }
 
-/// Refresh the app list, every app's releases, icons, news and CraftSpace's own updates.
+/// Refresh the app list, releases, icons and CraftSpace's own updates.
 pub fn refresh(bus: &Bus, manager: &Manager, force: bool, manual: bool) {
     let manager = manager.clone();
     bus.spawn("refresh", move |bus| {
         if let Err(err) = manager.refresh_catalog() {
             log::info!("using the built-in app list: {err:#}");
         }
-        for (source, err) in manager.refresh_addons() {
-            log::info!("couldn't refresh add-ons from {source}: {err:#}");
-        }
-        bus.send(Msg::Addons(manager.available_addons()));
         match manager.refresh_policy() {
             Ok(Some(_)) => bus.send(Msg::PolicyChanged),
             Ok(None) => {}
@@ -255,24 +200,12 @@ pub fn refresh(bus: &Bus, manager: &Manager, force: bool, manual: bool) {
         }
         let errors = manager.refresh_all(force).into_iter().map(|(id, e)| (id, format!("{e:#}"))).collect();
         bus.send(Msg::Refreshed { errors, manual });
-        // The organization's workspace profiles (the every-start ones on the first check).
-        static STARTED: AtomicBool = AtomicBool::new(false);
-        let starting = !STARTED.swap(true, Ordering::Relaxed);
-        let applied = manager.apply_policy_profiles(starting);
-        if !applied.is_empty() {
-            bus.send(Msg::PolicyProfiles(
-                applied.into_iter().map(|(id, r)| (id, r.map_err(|e| format!("{e:#}")))).collect(),
-            ));
-        }
         if let Err(err) = manager.write_report() {
             log::warn!("couldn't write the status report: {err:#}");
         }
         let changed = manager.fetch_icons();
         if !changed.is_empty() {
             bus.send(Msg::Icons(changed));
-        }
-        if let Ok(articles) = manager.articles(manual) {
-            bus.send(Msg::Articles(articles));
         }
         if let Ok(found) = selfupdate::check(&manager) {
             bus.send(Msg::SelfUpdateFound(found.map(Box::new)));
@@ -314,101 +247,11 @@ pub fn fetch_shot(bus: &Bus, manager: &Manager, url: &str) {
     });
 }
 
-pub fn fetch_fonts(bus: &Bus, manager: &Manager, addon: &str) {
-    let (manager, addon) = (manager.clone(), addon.to_string());
-    bus.spawn("fonts", move |bus| bus.send(Msg::Fonts(manager.font_list(&addon).map_err(|e| format!("{e:#}")))));
-}
-
 pub fn verify(bus: &Bus, manager: &Manager, id: &str) {
     let (manager, id) = (manager.clone(), id.to_string());
     bus.spawn("verify", move |bus| {
         let result = manager.verify(&id).map_err(|e| format!("{e:#}"));
         bus.send(Msg::Verified(id, result));
-    });
-}
-
-/// Fetch the registry and the stores, then show the add-ons.
-pub fn refresh_addons(bus: &Bus, manager: &Manager) {
-    let manager = manager.clone();
-    bus.spawn("addons", move |bus| {
-        for (source, err) in manager.refresh_addons() {
-            log::info!("couldn't refresh add-ons from {source}: {err:#}");
-        }
-        bus.send(Msg::Addons(manager.available_addons()));
-    });
-}
-
-/// Add an add-on repository (`owner/repo` or a catalog's address), then show its add-ons.
-pub fn add_addon_repo(bus: &Bus, manager: &Manager, address: String) {
-    let manager = manager.clone();
-    bus.spawn("addon-repo", move |bus| {
-        let result = manager.add_addon_repo(&address).map(|s| s.name).map_err(|e| format!("{e:#}"));
-        bus.send(Msg::AddonRepo(result));
-        bus.send(Msg::Addons(manager.available_addons()));
-    });
-}
-
-/// Add-ons as last fetched (quick, from the cache).
-pub fn load_addons(bus: &Bus, manager: &Manager) {
-    let manager = manager.clone();
-    bus.spawn("addons", move |bus| bus.send(Msg::Addons(manager.available_addons())));
-}
-
-pub fn export_profile(
-    bus: &Bus,
-    manager: &Manager,
-    id: &str,
-    parts: Vec<craftspace_core::profiles::Part>,
-    out: std::path::PathBuf,
-) {
-    let (manager, id) = (manager.clone(), id.to_string());
-    bus.spawn("profile", move |bus| {
-        let result = manager
-            .export_profile(&id, &parts, &out)
-            .map(|r| format!("Saved {} file{} to {}", r.files, if r.files == 1 { "" } else { "s" }, out.display()))
-            .map_err(|e| format!("{e:#}"));
-        bus.send(Msg::ProfileDone(result));
-    });
-}
-
-pub fn import_profile(
-    bus: &Bus,
-    manager: &Manager,
-    file: std::path::PathBuf,
-    parts: Vec<craftspace_core::profiles::Part>,
-) {
-    let manager = manager.clone();
-    bus.spawn("profile", move |bus| {
-        let result = manager
-            .import_profile(&file, &parts)
-            .map(|(r, _)| {
-                format!(
-                    "Brought in {} ({} file{}); it applies the next time the app starts",
-                    r.parts.iter().map(|p| p.label().to_lowercase()).collect::<Vec<_>>().join(", "),
-                    r.changed.len(),
-                    if r.changed.len() == 1 { "" } else { "s" }
-                )
-            })
-            .map_err(|e| format!("{e:#}"));
-        bus.send(Msg::ProfileDone(result));
-    });
-}
-
-pub fn reset_app(bus: &Bus, manager: &Manager, id: &str) {
-    let (manager, id) = (manager.clone(), id.to_string());
-    bus.spawn("reset", move |bus| {
-        let name = manager.app(&id).map(|a| a.name).unwrap_or_else(|| id.clone());
-        let result = manager
-            .reset_app(&id)
-            .map(|moved| match moved.first() {
-                None => format!("{name} has no settings to reset"),
-                Some(first) => format!(
-                    "{name} starts fresh; its old settings are in {}",
-                    first.parent().unwrap_or(first).display()
-                ),
-            })
-            .map_err(|e| format!("{e:#}"));
-        bus.send(Msg::ResetDone(id, result));
     });
 }
 
@@ -427,141 +270,6 @@ pub fn fill_cache(bus: &Bus, manager: &Manager) {
             })
             .map_err(|e| format!("{e:#}"));
         bus.send(Msg::CacheFilled(result));
-    });
-}
-
-pub fn scan_files(bus: &Bus, manager: &Manager, cancel: Arc<AtomicBool>) {
-    let manager = manager.clone();
-    bus.spawn("files", move |bus| {
-        let found = manager.scan_files(&cancel);
-        if !cancel.load(Ordering::Relaxed) {
-            bus.send(Msg::Files(found));
-        }
-    });
-}
-
-/// The largest picture decoded for a thumbnail; bigger ones show the app icon instead.
-const MAX_THUMB_SOURCE: u64 = 80 << 20;
-const THUMB_SIZE: u32 = 192;
-
-/// Make (or read from the cache) the thumbnail of `path`. `None`: no thumbnail for this file.
-pub fn fetch_thumb(bus: &Bus, manager: &Manager, path: std::path::PathBuf) {
-    let cache = manager.paths().cache.join("thumbs");
-    bus.spawn("thumbnail", move |bus| {
-        let image = thumbnail(&cache, &path)
-            .map_err(|e| log::debug!("no thumbnail for {}: {e:#}", path.display()))
-            .ok()
-            .flatten();
-        bus.send(Msg::Thumb(path, image));
-    });
-}
-
-fn thumbnail(cache: &std::path::Path, path: &std::path::Path) -> anyhow::Result<Option<egui::ColorImage>> {
-    use craftspace_core::thumbs;
-    let ext = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
-    if !thumbs::supported(&ext) {
-        return Ok(None);
-    }
-    let cached = thumbs::cache_path(cache, path);
-    let img = match cached.as_ref().filter(|c| c.is_file()).and_then(|c| image::open(c).ok()) {
-        Some(img) => img,
-        None => {
-            let source = if ext == "psd" || ext == "psb" {
-                match thumbs::psd_preview(path)? {
-                    Some(jpeg) => image::load_from_memory(&jpeg)?,
-                    None => return Ok(None),
-                }
-            } else {
-                anyhow::ensure!(std::fs::metadata(path)?.len() <= MAX_THUMB_SOURCE, "too big");
-                image::ImageReader::open(path)?.with_guessed_format()?.decode()?
-            };
-            let thumb = source.thumbnail(THUMB_SIZE, THUMB_SIZE);
-            if let Some(c) = &cached {
-                let _ = std::fs::create_dir_all(cache);
-                if let Err(err) = thumb.save(c) {
-                    log::debug!("couldn't cache a thumbnail: {err}");
-                }
-            }
-            thumb
-        }
-    };
-    let rgba = img.to_rgba8();
-    Ok(Some(egui::ColorImage::from_rgba_unmultiplied([rgba.width() as usize, rgba.height() as usize], rgba.as_raw())))
-}
-
-/// Watch the Files folders (and the apps' settings folders, for their recent lists); every
-/// relevant change sends [`Msg::FilesChanged`]. Dropping the watcher stops it.
-pub fn watch_files(bus: &Bus, manager: &Manager) -> Option<notify::RecommendedWatcher> {
-    use notify::{RecursiveMode, Watcher};
-    let settings = manager.settings();
-    let catalog = manager.catalog();
-    let extensions = catalog.all_extensions();
-    let mut settings_dirs = Vec::new();
-    if settings.files.app_recents {
-        for app in &catalog.apps {
-            settings_dirs.extend(craftspace_core::app_data::data_dirs(app, &[]));
-        }
-    }
-    let bus = bus.clone();
-    let dirs = settings_dirs.clone();
-    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        let Ok(event) = res else { return };
-        if matches!(event.kind, notify::EventKind::Access(_)) {
-            return;
-        }
-        let relevant = event.paths.iter().any(|p| {
-            let ext = p.extension().map(|e| e.to_string_lossy().to_ascii_lowercase());
-            match ext {
-                Some(ext) if extensions.binary_search(&ext).is_ok() => true,
-                Some(ext) if ext == "json" => p.parent().is_some_and(|d| dirs.iter().any(|s| s == d)),
-                _ => false,
-            }
-        });
-        if relevant {
-            bus.send(Msg::FilesChanged);
-        }
-    })
-    .map_err(|e| log::info!("can't watch folders: {e}"))
-    .ok()?;
-    for dir in &settings.file_locations {
-        if let Err(err) = watcher.watch(dir, RecursiveMode::Recursive) {
-            log::info!("can't watch {}: {err}", dir.display());
-        }
-    }
-    for dir in &settings_dirs {
-        let _ = watcher.watch(dir, RecursiveMode::NonRecursive);
-    }
-    Some(watcher)
-}
-
-pub fn find_portable(bus: &Bus, manager: &Manager) {
-    let manager = manager.clone();
-    bus.spawn("portable", move |bus| bus.send(Msg::Portable(manager.find_portable_data())));
-}
-
-pub fn import_portable(bus: &Bus, manager: &Manager, found: craftspace_core::app_data::PortableData) {
-    let manager = manager.clone();
-    bus.spawn("import", move |bus| {
-        let name = manager.app(&found.app_id).map(|a| a.name).unwrap_or_else(|| found.app_id.clone());
-        let result = manager
-            .import_portable(&found)
-            .map(|r| {
-                let mut text =
-                    format!("Moved {} file{} into {name}'s settings", r.copied, if r.copied == 1 { "" } else { "s" });
-                if r.recents_merged > 0 {
-                    text.push_str(&format!(
-                        ", with {} more recent file{}",
-                        r.recents_merged,
-                        if r.recents_merged == 1 { "" } else { "s" }
-                    ));
-                }
-                if !r.replaced.is_empty() {
-                    text.push_str(" (its old settings are kept as .before-import files)");
-                }
-                text
-            })
-            .map_err(|e| format!("{e:#}"));
-        bus.send(Msg::Imported(found.app_id, result));
     });
 }
 

@@ -35,24 +35,6 @@ fn main() -> eframe::Result {
         std::process::exit(headless_uninstall(&manager, &args[1..]));
     }
 
-    // `craftspace open <file>`: what double-clicking a file runs when CraftSpace opens its type.
-    let mut open_request = None;
-    if args.first().map(String::as_str) == Some(craftspace_core::file_types::OPEN_COMMAND) {
-        let Some(file) = args.get(1).map(std::path::PathBuf::from) else { std::process::exit(2) };
-        match manager.open_file(&file) {
-            Ok(None) => std::process::exit(0),
-            Ok(Some(app_id)) => open_request = Some((app_id, file)),
-            Err(err) => {
-                rfd::MessageDialog::new()
-                    .set_title("CraftSpace")
-                    .set_description(format!("Couldn't open {}: {err:#}", file.display()))
-                    .set_level(rfd::MessageLevel::Error)
-                    .show();
-                std::process::exit(1);
-            }
-        }
-    }
-
     // `--background`: started at login; stay in the tray until opened.
     let background = args.iter().any(|a| a == craftspace_core::autostart::BACKGROUND_FLAG);
     let renderer = renderer::choose(manager.paths());
@@ -74,7 +56,7 @@ fn main() -> eframe::Result {
     let result = eframe::run_native(
         "CraftSpace",
         options,
-        Box::new(move |cc| Ok(Box::new(app::CraftSpaceApp::new(cc, manager, background, open_request)))),
+        Box::new(move |cc| Ok(Box::new(app::CraftSpaceApp::new(cc, manager, background)))),
     );
     if let Err(err) = &result {
         renderer::fall_back(&paths, renderer, err);

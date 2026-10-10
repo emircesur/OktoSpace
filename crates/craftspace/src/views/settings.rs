@@ -131,33 +131,6 @@ pub fn window(app: &mut CraftSpaceApp, ctx: &egui::Context) {
                 _ => {}
             }
 
-            section(ui, &p, "Files");
-            let f = &app.settings.files;
-            let mut on: Vec<&str> = Vec::new();
-            if f.app_recents {
-                on.push("apps' recent files");
-            }
-            if f.thumbnails {
-                on.push("thumbnails");
-            }
-            if f.watch {
-                on.push("live updates");
-            }
-            if f.find_portable {
-                on.push("portable settings import");
-            }
-            let types = f.open_with_craftspace.len();
-            if types > 0 {
-                on.push("opening file types");
-            }
-            ui.label(if on.is_empty() { "All optional Files features are off.".to_string() } else { format!("On: {}.", on.join(", ")) });
-            if types > 0 {
-                ui.label(RichText::new(format!("CraftSpace opens {types} file type{}.", if types == 1 { "" } else { "s" })).size(12.0).color(p.weak));
-            }
-            if ui.button("Choose Files features…").clicked() {
-                app.actions.push(Action::OpenFilesSetup);
-            }
-
             section(ui, &p, "When you close the window");
             ui.add_enabled(free("keep_running_in_tray"), egui::Checkbox::new(&mut draft.keep_running_in_tray, "Keep CraftSpace running in the tray to check for updates"));
             ui.add_enabled(free("start_at_login"), egui::Checkbox::new(&mut draft.start_at_login, "Start CraftSpace in the background when I log in"));
@@ -174,7 +147,7 @@ pub fn window(app: &mut CraftSpaceApp, ctx: &egui::Context) {
                 ui.label("Dock icon");
                 ui.radio_value(&mut draft.dock_icon, DockIcon::ColorWhenOpen, "Full colour while the window is open, macOS's icon style otherwise");
                 ui.radio_value(&mut draft.dock_icon, DockIcon::Color, "Always full colour");
-                ui.radio_value(&mut draft.dock_icon, DockIcon::System, "Always macOS's icon style (dark, clear or tinted, like the ArtCraft apps)");
+                ui.radio_value(&mut draft.dock_icon, DockIcon::System, "Always macOS's icon style (dark, clear or tinted)");
                 ui.label(RichText::new("The icon style is chosen in System Settings › Appearance.").size(12.0).color(p.weak));
             }
 
@@ -191,34 +164,6 @@ pub fn window(app: &mut CraftSpaceApp, ctx: &egui::Context) {
 
             section(ui, &p, "IT & Classroom");
             it_section(app, ui, &p, &policy, &mut draft);
-
-            section(ui, &p, "Add-on repositories");
-            ui.label(RichText::new("Besides the CraftSpace registry, add-ons can come from repositories such as the ArtCraft Store. CraftSpace hasn't checked their add-ons for security; it asks before installing one.").size(12.0).color(p.weak));
-            for (store, _) in app.manager.addon_stores() {
-                let mut enabled = !draft.addon_stores.disabled.contains(&store.id);
-                ui.horizontal(|ui| {
-                    if ui.checkbox(&mut enabled, RichText::new(&store.name).strong()).changed() {
-                        if enabled {
-                            draft.addon_stores.disabled.retain(|s| *s != store.id);
-                        } else if !draft.addon_stores.disabled.contains(&store.id) {
-                            draft.addon_stores.disabled.push(store.id.clone());
-                        }
-                    }
-                    if let Some(repo) = &store.repo {
-                        ui.label(RichText::new(format!("github.com/{repo}")).size(12.0).color(p.weak));
-                    }
-                    if draft.addon_stores.custom.iter().any(|s| s.id == store.id) && ui.small_button("Remove").clicked() {
-                        draft.addon_stores.custom.retain(|s| s.id != store.id);
-                    }
-                });
-            }
-            if ui.button("Add a repository…").on_hover_text("Saves these settings, then opens Fonts & add-ons › Repositories").clicked() {
-                app.apps_view = crate::app::AppsView::Addons;
-                app.addon_repos_tab = true;
-                app.tab = crate::app::Tab::Apps;
-                save = true;
-                keep_open = false;
-            }
 
             section(ui, &p, "Other sources (advanced)");
             ui.add_enabled(
@@ -356,13 +301,6 @@ fn it_section(app: &mut CraftSpaceApp, ui: &mut Ui, p: &theme::Palette, policy: 
             }
             if policy.prevent_uninstall {
                 facts.push("Apps can't be uninstalled or rolled back (except by an administrator).".into());
-            }
-            for (id, profile) in &policy.profiles {
-                let when = match profile.apply {
-                    craftspace_core::policy::ProfileApply::Once => "when it changes",
-                    craftspace_core::policy::ProfileApply::EveryStart => "at every start",
-                };
-                facts.push(format!("{} gets the organization's setup {when}.", app.app_name(id)));
             }
             if let Some(dir) = &policy.report_dir {
                 facts.push(format!("A status report is saved to {} after each check.", dir.display()));

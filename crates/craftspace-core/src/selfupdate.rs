@@ -181,7 +181,6 @@ pub fn self_entry() -> crate::catalog::AppEntry {
         category: "tools".into(),
         tagline: "Install and update ArtCraft apps".into(),
         description: String::new(),
-        like: None,
         colors: crate::catalog::Colors { bg: "#1B1B1D".into(), fg: "#3B82F6".into() },
         extensions: Vec::new(),
         homepage: Some(format!("https://github.com/{REPO}")),

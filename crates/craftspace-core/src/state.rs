@@ -16,18 +16,6 @@ pub struct InstalledDb {
     /// Folders that could not be removed yet (usually because the app was running).
     #[serde(default)]
     pub pending_removal: Vec<PathBuf>,
-    /// Installed font files, by file name.
-    #[serde(default)]
-    pub fonts: BTreeMap<String, crate::fonts::InstalledFont>,
-    /// Files written by add-on packs, by add-on id.
-    #[serde(default)]
-    pub packs: BTreeMap<String, Vec<PathBuf>>,
-    /// Add-ons from the registry and stores, by id.
-    #[serde(default)]
-    pub addons: BTreeMap<String, crate::addons::Installed>,
-    /// Workspace profiles from the policy that were applied: app id → the profile's SHA-256.
-    #[serde(default)]
-    pub profiles_applied: BTreeMap<String, String>,
 }
 
 /// One installed version of an app.

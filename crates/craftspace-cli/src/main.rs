@@ -15,7 +15,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use craftspace_core::download::format_bytes;
 use craftspace_core::manager::AppList;
 use craftspace_core::settings::Channel;
-use craftspace_core::{autostart, fonts, profiles, selfupdate, AppState, Manager, Progress, ProgressEvent, Stage};
+use craftspace_core::{autostart, selfupdate, AppState, Manager, Progress, ProgressEvent, Stage};
 use semver::Version;
 
 /// No progress output (set by `--quiet`).
@@ -146,30 +146,6 @@ enum Command {
         #[command(subcommand)]
         action: CacheAction,
     },
-    /// Put an app's settings back to how they were on first start (e.g. between classes). The
-    /// old settings are kept beside them as `<folder>.reset-<time>`.
-    Reset {
-        apps: Vec<String>,
-        /// Every installed app.
-        #[arg(long, conflicts_with = "apps")]
-        all: bool,
-        #[arg(long, short)]
-        yes: bool,
-    },
-    /// Add-ons: presets, palettes, LUTs and plug-ins from the CraftSpace registry and add-on
-    /// stores.
-    Addons {
-        #[command(subcommand)]
-        action: AddonAction,
-    },
-    /// Workspace sync: an app's layouts, shortcuts, preferences and presets as one file, for
-    /// another computer or a whole classroom.
-    Profile {
-        #[command(subcommand)]
-        action: ProfileAction,
-    },
-    /// Open a file in the ArtCraft app that handles it.
-    OpenFile { file: PathBuf },
     /// Find ArtCraft apps installed without CraftSpace and keep them up to date where they are.
     Detect,
     /// Optional: apps from other GitHub repositories, and forks or mirrors to update from.
@@ -177,19 +153,6 @@ enum Command {
         #[command(subcommand)]
         action: SourceAction,
     },
-    /// Open ArtCraft file types through CraftSpace (double-clicking opens the right app, or
-    /// offers to install it).
-    FileTypes {
-        #[command(subcommand)]
-        action: FileTypesAction,
-    },
-    /// Fonts from the ArtCraft font collection.
-    Fonts {
-        #[command(subcommand)]
-        action: FontsAction,
-    },
-    /// Latest news and tutorials from the ArtCraft website.
-    News,
     /// Open a pre-filled bug report for an app (prints the link with --quiet).
     ReportBug { app: String },
     /// Start CraftSpace in the background when you log in.
@@ -234,94 +197,6 @@ enum PolicyAction {
     Check { file: PathBuf },
     /// Fetch the centrally published policy (policy_url) now.
     Refresh,
-}
-
-#[derive(Subcommand)]
-enum AddonAction {
-    /// Show the add-ons (checked by CraftSpace or not), optionally for one app.
-    List {
-        #[arg(long)]
-        app: Option<String>,
-        /// Only add-ons checked by CraftSpace.
-        #[arg(long)]
-        checked: bool,
-    },
-    /// Show one add-on: what it is, where it comes from and where it goes.
-    Info { id: String },
-    /// Install an add-on. Add-ons not checked by CraftSpace ask first (or take --yes).
-    Install {
-        ids: Vec<String>,
-        #[arg(long, short)]
-        yes: bool,
-    },
-    /// Update installed add-ons that have a newer version (all of them, or the ones named).
-    Update {
-        ids: Vec<String>,
-        #[arg(long, short)]
-        yes: bool,
-    },
-    /// Remove an add-on's files.
-    Remove { ids: Vec<String> },
-    /// Add-on repositories besides the CraftSpace registry (the ArtCraft Store, ones you add).
-    #[command(alias = "sources")]
-    Repos {
-        #[command(subcommand)]
-        action: Option<StoreAction>,
-    },
-    /// Check a CraftSpace-compatible repo's catalog: a craftspace-addons.json file, or owner/repo.
-    Check { target: String },
-    /// Other plug-in sources CraftSpace lists but doesn't install from.
-    #[command(alias = "repositories")]
-    Elsewhere,
-}
-
-#[derive(Subcommand)]
-enum StoreAction {
-    List,
-    /// Add a repository: owner/repo on GitHub (CraftSpace-compatible repos have a
-    /// craftspace-addons.json at their root), or the https:// address of a catalog.
-    Add {
-        address: String,
-    },
-    /// Remove a repository you added (suggested ones are turned off).
-    Remove {
-        id: String,
-    },
-    Enable {
-        id: String,
-    },
-    Disable {
-        id: String,
-    },
-}
-
-#[derive(Subcommand)]
-enum ProfileAction {
-    /// Save an app's setup to a .craftprofile file.
-    Export {
-        app: String,
-        /// The file to write (default: <app>.craftprofile here).
-        #[arg(long, short)]
-        out: Option<PathBuf>,
-        /// Only these parts: layouts, shortcuts, preferences, presets (comma-separated).
-        #[arg(long, default_value = "")]
-        parts: String,
-    },
-    /// Bring a profile into its app on this computer (the current setup is saved first).
-    Import {
-        file: PathBuf,
-        /// Only these parts: layouts, shortcuts, preferences, presets (comma-separated).
-        #[arg(long, default_value = "")]
-        parts: String,
-        #[arg(long, short)]
-        yes: bool,
-    },
-    /// Show what a profile holds.
-    Show { file: PathBuf },
-    /// Show which parts an app's profiles can carry.
-    Parts { app: String },
-    /// List the setups saved before each import (import one to go back).
-    Backups { app: String },
 }
 
 #[derive(Subcommand)]
@@ -590,97 +465,12 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
                     failed += 1;
                 }
             }
-            for (id, result) in manager.apply_policy_profiles(true) {
-                match result {
-                    Ok(text) => say!("{text}"),
-                    Err(err) => {
-                        eprintln!("error: {id}: profile: {err:#}");
-                        failed += 1;
-                    }
-                }
-            }
             match manager.write_report() {
                 Ok(Some(file)) => say!("Report: {}", file.display()),
                 Ok(None) => {}
                 Err(err) => eprintln!("warning: couldn't write the report: {err:#}"),
             }
         }
-        Command::Addons { action } => {
-            failed += addons_command(&manager, action)?;
-        }
-        Command::Profile { action } => match action {
-            ProfileAction::Export { app, out, parts } => {
-                let parts = profiles::Part::parse_list(&parts)?;
-                let id = manager.app(&app).map(|a| a.id).unwrap_or(app);
-                let out = out.unwrap_or_else(|| PathBuf::from(format!("{id}.{}", profiles::EXTENSION)));
-                let report = manager.export_profile(&id, &parts, &out)?;
-                say!(
-                    "Saved {} ({} file{}) to {}",
-                    report.parts.iter().map(|p| p.label().to_lowercase()).collect::<Vec<_>>().join(", "),
-                    report.files,
-                    if report.files == 1 { "" } else { "s" },
-                    out.display()
-                );
-            }
-            ProfileAction::Import { file, parts, yes } => {
-                let manifest = profiles::read_manifest(&file)?;
-                let parts = profiles::Part::parse_list(&parts)?;
-                let name = manager.app(&manifest.app).map(|a| a.name).unwrap_or(manifest.app.clone());
-                if !yes && std::io::stdin().is_terminal() {
-                    eprint!(
-                        "Bring {} into {name} on this computer? Its current setup is saved first. [y/N] ",
-                        parts.iter().map(|p| p.label().to_lowercase()).collect::<Vec<_>>().join(", ")
-                    );
-                    let mut answer = String::new();
-                    std::io::stdin().read_line(&mut answer)?;
-                    if !answer.trim().eq_ignore_ascii_case("y") {
-                        return Ok(ExitCode::SUCCESS);
-                    }
-                }
-                let (report, backup) = manager.import_profile(&file, &parts)?;
-                say!(
-                    "{name}: updated {} file{}.",
-                    report.changed.len(),
-                    if report.changed.len() == 1 { "" } else { "s" }
-                );
-                if let Some(backup) = backup {
-                    say!("The previous setup is saved in {} (import it to go back).", backup.display());
-                }
-            }
-            ProfileAction::Show { file } => {
-                let m = profiles::read_manifest(&file)?;
-                let name = manager.app(&m.app).map(|a| a.name).unwrap_or(m.app.clone());
-                println!(
-                    "{name}{} profile, made on {}",
-                    m.app_version.map(|v| format!(" {v}")).unwrap_or_default(),
-                    if m.os.is_empty() { "?".into() } else { m.os }
-                );
-                println!("Parts: {}", m.parts.iter().map(|p| p.label()).collect::<Vec<_>>().join(", "));
-                for f in m.files {
-                    println!("  {}/{}", f.root, f.path);
-                }
-            }
-            ProfileAction::Parts { app } => {
-                let id = manager.app(&app).map(|a| a.id).unwrap_or(app);
-                let (parts, note) = manager.profile_parts(&id)?;
-                for p in parts {
-                    println!("{:<12} {}", format!("{p:?}").to_lowercase(), p.label());
-                }
-                if let Some(note) = note {
-                    println!("Note: {note}");
-                }
-            }
-            ProfileAction::Backups { app } => {
-                let id = manager.app(&app).map(|a| a.id).unwrap_or(app);
-                let backups = manager.profile_backups(&id);
-                if backups.is_empty() {
-                    say!("No saved setups for {id} yet.");
-                }
-                for b in backups {
-                    println!("{}", b.display());
-                }
-            }
-        },
         Command::Policy { action } => match action {
             PolicyAction::Show { json } => {
                 let policy = manager.policy();
@@ -841,67 +631,6 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
                 }
             }
         },
-        Command::Reset { apps, all, yes } => {
-            let ids: Vec<String> = if all { manager.installed().apps.into_keys().collect() } else { apps };
-            anyhow::ensure!(!ids.is_empty(), "name the apps to reset, or use --all");
-            if !yes && std::io::stdin().is_terminal() {
-                eprint!("Reset the settings of {}? Their current settings are kept aside. [y/N] ", ids.join(", "));
-                let mut answer = String::new();
-                std::io::stdin().read_line(&mut answer)?;
-                if !answer.trim().eq_ignore_ascii_case("y") {
-                    return Ok(ExitCode::SUCCESS);
-                }
-            }
-            for id in ids {
-                match manager.reset_app(&id) {
-                    Ok(moved) if moved.is_empty() => say!("{id}: no settings yet"),
-                    Ok(moved) => {
-                        for m in moved {
-                            say!("{id}: settings moved to {}", m.display());
-                        }
-                    }
-                    Err(err) => {
-                        eprintln!("error: {id}: {err:#}");
-                        failed += 1;
-                    }
-                }
-            }
-        }
-        Command::Fonts { action } => {
-            let addon = manager
-                .catalog()
-                .addons
-                .into_iter()
-                .find(|a| a.kind == craftspace_core::catalog::AddonKind::Fonts)
-                .context("the catalog offers no fonts")?;
-            match action {
-                FontsAction::List => {
-                    let installed = manager.installed_fonts();
-                    for f in manager.font_list(&addon.id)? {
-                        let scripts: Vec<&str> = f.scripts.iter().map(|s| fonts::script_name(s)).collect();
-                        let mark = if installed.contains_key(f.file_name()) { "installed" } else { "" };
-                        println!("{:<20} {:<8} {:<34} {mark}", f.family, f.style, scripts.join(", "));
-                    }
-                }
-                FontsAction::Install { family } => {
-                    let n = with_progress(&addon.name, |p| manager.install_fonts(&addon.id, family.as_deref(), p))?;
-                    say!("Installed {n} font file(s).");
-                }
-                FontsAction::Uninstall { family } => {
-                    let n = manager.uninstall_fonts(family.as_deref())?;
-                    say!("Removed {n} font file(s).");
-                }
-            }
-        }
-        Command::News => {
-            for a in manager.articles(cli.refresh)? {
-                let kind = match a.kind {
-                    craftspace_core::news::ArticleKind::News => "news",
-                    craftspace_core::news::ArticleKind::Tutorial => "tutorial",
-                };
-                println!("{:<9} {:<10} {}\n          {}", kind, a.date.as_deref().unwrap_or(""), a.title, a.url);
-            }
-        }
         Command::ReportBug { app } => {
             let url = manager.bug_report_url(&app).with_context(|| format!("unknown app '{app}'"))?;
             if cli.quiet || open::that_detached(&url).is_err() {
@@ -1018,59 +747,6 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
                 say!("Found {name} {}", version.map(|v| v.to_string()).unwrap_or_else(|| "(version unknown)".into()));
             }
         }
-        Command::OpenFile { file } => match manager.open_file(&file)? {
-            None => {}
-            Some(id) => {
-                let name = manager.app(&id).map(|a| a.name).unwrap_or_else(|| id.clone());
-                anyhow::bail!(
-                    "{} opens in {name}, which isn't installed; run: craftspace-cli install {id}",
-                    file.display()
-                );
-            }
-        },
-        Command::FileTypes { action } => {
-            let mut settings = manager.settings();
-            match action {
-                FileTypesAction::List => {
-                    let types = &settings.files.open_with_craftspace;
-                    if types.is_empty() {
-                        say!("CraftSpace doesn't open any file types; they open in their apps directly.");
-                    } else {
-                        say!(
-                            "CraftSpace opens: {}",
-                            types.iter().map(|e| format!(".{e}")).collect::<Vec<_>>().join(" ")
-                        );
-                    }
-                    return Ok(ExitCode::SUCCESS);
-                }
-                FileTypesAction::On { extensions } => {
-                    let all = manager.catalog().all_extensions();
-                    let chosen: Vec<String> = if extensions.is_empty() {
-                        all.into_iter().filter(|e| craftspace_core::file_types::default_on(e)).collect()
-                    } else {
-                        let chosen: Vec<String> =
-                            extensions.iter().map(|e| e.trim_start_matches('.').to_ascii_lowercase()).collect();
-                        if let Some(bad) = chosen.iter().find(|e| all.binary_search(e).is_err()) {
-                            anyhow::bail!("no ArtCraft app opens .{bad}");
-                        }
-                        chosen
-                    };
-                    let r = manager.register_file_types(&chosen)?;
-                    settings.files.open_with_craftspace = chosen;
-                    manager.set_settings(settings)?;
-                    say!("CraftSpace now opens {} file type(s).", r.types);
-                    if let Some(url) = r.confirm_url {
-                        say!("Windows asks you to confirm: choose CraftSpace in Settings › Default apps ({url}).");
-                    }
-                }
-                FileTypesAction::Off => {
-                    manager.register_file_types(&[])?;
-                    settings.files.open_with_craftspace.clear();
-                    manager.set_settings(settings)?;
-                    say!("File types open in their apps directly again.");
-                }
-            }
-        }
         Command::Paths => {
             let p = manager.paths();
             println!("platform   {}", manager.platform().display());
@@ -1079,7 +755,6 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             println!("settings   {}", p.settings_file().display());
             println!("installed  {}", p.installed_file().display());
             println!("policy     {}", craftspace_core::policy::Policy::default_path().display());
-            println!("fonts      {}", fonts::fonts_dir().map(|d| d.display().to_string()).unwrap_or_default());
         }
         Command::Cleanup => {
             let freed = manager.cleanup()?;
@@ -1288,229 +963,4 @@ fn confirm(question: &str) -> anyhow::Result<bool> {
     let mut answer = String::new();
     std::io::stdin().read_line(&mut answer)?;
     Ok(matches!(answer.trim(), "y" | "Y" | "yes" | "Yes"))
-}
-
-fn addon_line(a: &craftspace_core::addons::Addon, installed: bool) -> String {
-    format!(
-        "{:<44} {:<28} {:<16} {}{}",
-        a.id,
-        a.name,
-        if a.checked() { "checked" } else { "NOT CHECKED" },
-        a.source,
-        if installed { "  [installed]" } else { "" }
-    )
-}
-
-fn addons_command(manager: &Manager, action: AddonAction) -> anyhow::Result<u32> {
-    use craftspace_core::addons;
-    let mut failed = 0;
-    match action {
-        AddonAction::List { app, checked } => {
-            for (store, err) in manager.refresh_addons() {
-                eprintln!("warning: couldn't refresh {store}: {err:#}");
-            }
-            let installed = manager.installed_addons();
-            let app = app.map(|a| manager.app(&a).map(|e| e.id).unwrap_or(a));
-            for a in manager.available_addons() {
-                if app.as_ref().is_some_and(|id| !a.apps.contains(id)) || (checked && !a.checked()) {
-                    continue;
-                }
-                println!("{}", addon_line(&a, installed.contains_key(&a.id)));
-            }
-            println!(
-                "\nAdd-ons marked NOT CHECKED weren't reviewed by CraftSpace. Submit yours: {}",
-                addons::SUBMIT_URL
-            );
-        }
-        AddonAction::Info { id } => {
-            let a = manager
-                .available_addons()
-                .into_iter()
-                .find(|a| a.id == id)
-                .ok_or_else(|| anyhow::anyhow!("unknown add-on {id}"))?;
-            println!("{} {}", a.name, a.version.clone().unwrap_or_default());
-            println!("{}", a.description);
-            println!("Kind:    {}", a.kind.label());
-            println!(
-                "For:     {}",
-                a.apps
-                    .iter()
-                    .map(|id| manager.app(id).map(|e| e.name).unwrap_or(id.clone()))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-            if let Some(author) = &a.author {
-                println!("Author:  {author}");
-            }
-            if let Some(license) = &a.license {
-                println!("License: {license}");
-            }
-            println!("Source:  {}", a.source);
-            println!(
-                "Checked: {}",
-                if a.checked() { "yes, by CraftSpace" } else { "no: CraftSpace hasn't reviewed it for security" }
-            );
-            match a.file_for(manager.platform()) {
-                Some(f) => println!(
-                    "Download: {}\n          {}",
-                    f.url,
-                    f.sha256
-                        .as_deref()
-                        .map(|s| format!("SHA-256 {s}"))
-                        .unwrap_or_else(|| "no checksum published".into())
-                ),
-                None => println!("Download: none for {}", manager.platform().display()),
-            }
-            if let Some(home) = &a.homepage {
-                println!("More:    {home}");
-            }
-        }
-        AddonAction::Update { ids, yes } => {
-            let updates: Vec<String> = manager
-                .addon_updates()
-                .into_iter()
-                .filter(|a| ids.is_empty() || ids.contains(&a.id))
-                .map(|a| a.id)
-                .collect();
-            if updates.is_empty() {
-                say!("Add-ons are up to date.");
-            } else {
-                failed += addons_command(manager, AddonAction::Install { ids: updates, yes })?;
-            }
-        }
-        AddonAction::Install { ids, yes } => {
-            anyhow::ensure!(!ids.is_empty(), "name the add-ons to install (see `craftspace-cli addons list`)");
-            let list = manager.available_addons();
-            for id in ids {
-                let Some(a) = list.iter().find(|a| a.id == id) else {
-                    eprintln!("error: unknown add-on {id}");
-                    failed += 1;
-                    continue;
-                };
-                let mut accept = yes;
-                if !a.checked() && !yes {
-                    if !std::io::stdin().is_terminal() {
-                        eprintln!("error: {} isn't checked by CraftSpace; pass --yes to install it anyway", a.name);
-                        failed += 1;
-                        continue;
-                    }
-                    let checksum = match a.file_for(manager.platform()).and_then(|f| f.sha256.as_ref()) {
-                        Some(_) => {
-                            "Its download is checked against a pinned checksum, but its code hasn't been reviewed."
-                        }
-                        None => "Its source publishes no checksum, so CraftSpace can't tell if the file was changed.",
-                    };
-                    eprint!(
-                        "{} comes from {} and isn't checked by CraftSpace. {checksum} Install it anyway? [y/N] ",
-                        a.name, a.source
-                    );
-                    let mut answer = String::new();
-                    std::io::stdin().read_line(&mut answer)?;
-                    accept = answer.trim().eq_ignore_ascii_case("y");
-                    if !accept {
-                        continue;
-                    }
-                }
-                match with_progress(&a.name, |p| manager.install_addon(&a.id, accept, p)) {
-                    Ok(report) => {
-                        say!(
-                            "Installed {} ({} file{}).",
-                            a.name,
-                            report.written.len(),
-                            if report.written.len() == 1 { "" } else { "s" }
-                        );
-                        for note in report.notes {
-                            say!("  {note}");
-                        }
-                    }
-                    Err(err) => {
-                        eprintln!("error: {}: {err:#}", a.name);
-                        failed += 1;
-                    }
-                }
-            }
-        }
-        AddonAction::Remove { ids } => {
-            for id in ids {
-                match manager.uninstall_addon(&id) {
-                    Ok(n) => say!("Removed {id} ({n} file{}).", if n == 1 { "" } else { "s" }),
-                    Err(err) => {
-                        eprintln!("error: {id}: {err:#}");
-                        failed += 1;
-                    }
-                }
-            }
-        }
-        AddonAction::Repos { action } => match action.unwrap_or(StoreAction::List) {
-            StoreAction::List => {
-                println!("CraftSpace registry  (on)\n  {}\n", addons::REGISTRY_URL);
-                for (store, on) in manager.addon_stores() {
-                    println!(
-                        "{}  ({}, id: {}, not checked by CraftSpace)",
-                        store.name,
-                        if on { "on" } else { "off" },
-                        store.id
-                    );
-                    if let Some(repo) = &store.repo {
-                        println!("  github.com/{repo}");
-                    }
-                    println!("  {}", store.url);
-                    if !store.description.is_empty() {
-                        println!("  {}", store.description);
-                    }
-                    println!();
-                }
-                println!("Add one: craftspace-cli addons repos add owner/repo");
-            }
-            StoreAction::Add { address } => {
-                let store = manager.add_addon_repo(&address)?;
-                let count = manager.available_addons().iter().filter(|a| a.source == store.name).count();
-                say!("Added {} (id: {}): {count} add-on(s), shown as not checked by CraftSpace.", store.name, store.id);
-            }
-            StoreAction::Remove { id } => {
-                manager.remove_addon_repo(&id)?;
-                say!("Removed {id}.");
-            }
-            StoreAction::Enable { id } => {
-                manager.set_addon_repo_enabled(&id, true)?;
-                say!("{id} is on.");
-            }
-            StoreAction::Disable { id } => {
-                manager.set_addon_repo_enabled(&id, false)?;
-                say!("{id} is off.");
-            }
-        },
-        AddonAction::Check { target } => {
-            let text = if Path::new(&target).is_file() {
-                std::fs::read_to_string(&target)?
-            } else {
-                let addons::RepoAddress::GitHub { owner, repo } = addons::parse_repo_address(&target)? else {
-                    anyhow::bail!("give a craftspace-addons.json file or owner/repo");
-                };
-                let url = addons::repo_catalog_candidates(&owner, &repo).remove(0);
-                let mut resp = manager.agent().get(&url).call().with_context(|| format!("couldn't fetch {url}"))?;
-                anyhow::ensure!(resp.status().is_success(), "{url} returned HTTP {}", resp.status().as_u16());
-                resp.body_mut().read_to_string()?
-            };
-            let problems = addons::check_catalog(&text, &manager.catalog());
-            if problems.is_empty() {
-                let reg = addons::parse_registry(&text, "check")?;
-                say!("Looks good: {} add-on(s) CraftSpace can install.", reg.addons.len());
-            } else {
-                for p in &problems {
-                    eprintln!("error: {p}");
-                }
-                anyhow::bail!("{} problem(s)", problems.len());
-            }
-        }
-        AddonAction::Elsewhere => {
-            println!(
-                "Other plug-in sources. CraftSpace doesn't install from these and hasn't checked them for security:\n"
-            );
-            for r in manager.addon_registry().repositories {
-                println!("{}  ({})\n  {}\n  {}\n", r.name, r.apps.join(", "), r.description, r.url);
-            }
-        }
-    }
-    Ok(failed)
 }
