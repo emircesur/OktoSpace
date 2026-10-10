@@ -93,10 +93,11 @@ grep -q "from the package cache" "$lab/pc2.txt"
 test "$(installed photocraft version)" = "0.3.0"
 unset OKTOSPACE_POLICY
 
-# Other sources (optional): an app from any GitHub repository.
+# Apps from any GitHub repository (on by default; turned off, added apps are refused).
 export OKTOSPACE_HOME="$RUNNER_TEMP/sources"
 "$cli" config prefer_system_installer false
-if "$cli" source add BurntSushi/ripgrep --binary rg; then echo "other sources are off by default"; exit 1; fi
+"$cli" source disable
+if "$cli" source add BurntSushi/ripgrep --binary rg; then echo "adding apps should be off"; exit 1; fi
 "$cli" source check BurntSushi/ripgrep
 "$cli" source enable
 "$cli" source add BurntSushi/ripgrep --binary rg

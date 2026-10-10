@@ -1,4 +1,4 @@
-# End-to-end checks against real ArtCraft releases (Windows): portable installs with Start menu
+# End-to-end checks against real releases (Windows): portable installs with Start menu
 # shortcuts and Settings › Apps entries, the MSI and NSIS paths, fonts, autostart, self-install.
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $true
@@ -6,7 +6,7 @@ $cli = Join-Path $PWD "target\debug\oktospace-cli.exe"
 $env:OKTOSPACE_HOME = Join-Path $env:RUNNER_TEMP "cs"
 function Installed($id) { (Get-Content (Join-Path $env:OKTOSPACE_HOME "installed.json") | ConvertFrom-Json).apps.$id }
 function Check($cond, $what) { if (-not $cond) { throw "check failed: $what" } else { Write-Host "ok: $what" } }
-$startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\ArtCraft"
+$startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\OktoSpace"
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
 
 & $cli list
