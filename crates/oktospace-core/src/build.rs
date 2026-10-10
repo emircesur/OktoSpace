@@ -296,6 +296,35 @@ pub fn tool_for(hint: &str) -> Option<Tool> {
     })
 }
 
+/// Every tool OktoSpace's builds can use, and where it is installed (`None` when it isn't).
+pub fn toolchains() -> Vec<(Tool, Option<PathBuf>)> {
+    [CARGO, GO, ZIG, CMAKE, MESON, NINJA, SWIFT, DOTNET, NPM, MAKE]
+        .into_iter()
+        .map(|t| {
+            let found = find_program(t.program);
+            (t, found)
+        })
+        .collect()
+}
+
+/// The first line a tool prints about its version (`cargo 1.90.0 (...)`), when it runs.
+pub fn tool_version(program: &Path) -> Option<String> {
+    let name = program.file_stem()?.to_string_lossy().to_ascii_lowercase();
+    let arg = if name == "go" { "version" } else { "--version" };
+    let mut cmd = std::process::Command::new(program);
+    cmd.arg(arg).stdin(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    let out = cmd.output().ok()?;
+    let text = if out.stdout.is_empty() { out.stderr } else { out.stdout };
+    let line = String::from_utf8_lossy(&text).lines().map(str::trim).find(|l| !l.is_empty())?.to_string();
+    // `npm --version` prints only `10.9.4`: say which program it is.
+    Some(if line.to_ascii_lowercase().contains(&name) { line } else { format!("{name} {line}") })
+}
+
 /// The tools a recipe needs that aren't installed.
 pub fn missing_tools(recipe: &Recipe) -> Vec<Tool> {
     recipe.tools.iter().filter(|t| find_program(t.program).is_none()).cloned().collect()

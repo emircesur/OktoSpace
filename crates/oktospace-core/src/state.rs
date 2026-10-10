@@ -53,6 +53,17 @@ impl InstalledVersion {
     pub fn built_from_source(&self) -> bool {
         self.asset.ends_with("-built.tar.gz")
     }
+
+    /// The version as people read it: `1.2.0`, or `commit 1a2b3c4` for a build of a commit.
+    pub fn label(&self) -> String {
+        if self.version.pre.as_str().starts_with("source.") {
+            if !self.version.build.is_empty() {
+                return format!("commit {}", self.version.build.as_str());
+            }
+            return format!("source of {}", self.tag);
+        }
+        self.version.to_string()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -221,6 +221,33 @@ pub fn window(app: &mut OktoSpaceApp, ctx: &egui::Context) {
                 ui.label(RichText::new("Save to turn them on, then add apps here.").size(12.0).color(p.warn));
             }
 
+            section(ui, &p, "Storage");
+            storage_section(app, ui, &p);
+
+            section(ui, &p, "Build tools");
+            ui.label(RichText::new("What building from source can use on this computer.").size(12.5).color(p.weak));
+            if let Some(tools) = &app.toolchains {
+                egui::Grid::new("toolchains").num_columns(3).spacing([16.0, 4.0]).show(ui, |ui| {
+                    for (tool, found) in tools {
+                        match found {
+                            Some(path) => {
+                                ui.label(tool.name);
+                                ui.label(RichText::new("Installed").size(12.0).color(p.good));
+                                ui.add(egui::Label::new(RichText::new(path.display().to_string()).size(12.0).color(p.weak)).truncate());
+                            }
+                            None => {
+                                ui.label(RichText::new(tool.name).color(p.weak));
+                                ui.label(RichText::new("Not installed").size(12.0).color(p.weak));
+                                if ui.add(egui::Button::new(RichText::new("Get it ↗").size(12.0).color(p.accent)).frame(false)).clicked() {
+                                    app.actions.push(Action::OpenUrl(tool.url.to_string()));
+                                }
+                            }
+                        }
+                        ui.end_row();
+                    }
+                });
+            }
+
             section(ui, &p, "GitHub");
             ui.label("Release information comes from GitHub. Without a token, GitHub allows 60 requests an hour; OktoSpace caches and falls back to direct downloads when the limit is hit. A token with no scopes raises the limit.");
             let mut token = draft.github_token.clone().unwrap_or_default();
@@ -376,4 +403,58 @@ fn section(ui: &mut Ui, p: &crate::theme::Palette, title: &str) {
     ui.add_space(12.0);
     ui.label(RichText::new(title).size(15.0).strong().color(p.text));
     ui.add_space(2.0);
+}
+
+/// Disk space used by each app (and its earlier version), downloads, builds and the cache.
+fn storage_section(app: &mut OktoSpaceApp, ui: &mut Ui, p: &theme::Palette) {
+    use oktospace_core::download::format_bytes;
+    let Some(storage) = app.storage.clone() else { return };
+    let catalog = app.manager.catalog();
+    let kept: u64 = storage.apps.iter().map(|a| a.previous).sum();
+    let total = storage.apps.iter().map(|a| a.current + a.previous).sum::<u64>()
+        + storage.downloads
+        + storage.builds
+        + storage.cache;
+    ui.label(format!("OktoSpace uses {} in all.", format_bytes(total)));
+    egui::Grid::new("storage").num_columns(3).spacing([16.0, 4.0]).striped(true).show(ui, |ui| {
+        for a in &storage.apps {
+            let name =
+                catalog.apps.iter().find(|e| e.id == a.id).map(|e| e.name.clone()).unwrap_or_else(|| a.id.clone());
+            ui.label(name);
+            ui.label(format_bytes(a.current));
+            if a.previous > 0 {
+                if ui
+                    .small_button(format!("Remove earlier version ({})", format_bytes(a.previous)))
+                    .on_hover_text("Frees the space, but the app can't be rolled back any more")
+                    .clicked()
+                {
+                    app.actions.push(Action::TrimPrevious(a.id.clone()));
+                }
+            } else {
+                ui.label("");
+            }
+            ui.end_row();
+        }
+        for (label, bytes) in [
+            ("Downloads", storage.downloads),
+            ("Build folders", storage.builds),
+            ("Cache (release information, icons)", storage.cache),
+        ] {
+            ui.label(RichText::new(label).color(p.weak));
+            ui.label(format_bytes(bytes));
+            ui.label("");
+            ui.end_row();
+        }
+    });
+    ui.horizontal(|ui| {
+        if storage.downloads + storage.builds > 0 && ui.button("Clear downloads and build files").clicked() {
+            app.actions.push(Action::Cleanup);
+            app.storage = None;
+        }
+        if kept > 0 && ui.button(format!("Remove all earlier versions ({})", format_bytes(kept))).clicked() {
+            for a in storage.apps.iter().filter(|a| a.previous > 0) {
+                app.actions.push(Action::TrimPrevious(a.id.clone()));
+            }
+        }
+    });
 }

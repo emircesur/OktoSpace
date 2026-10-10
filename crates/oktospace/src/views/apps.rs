@@ -21,6 +21,7 @@ pub fn sidebar(app: &mut OktoSpaceApp, ui: &mut Ui) {
     nav(app, ui, "Installed", AppsView::Installed, Some(installed), false);
     let favorites = app.settings.favorites.len();
     nav(app, ui, "Favorites", AppsView::Favorites, (favorites > 0).then_some(favorites), false);
+    nav(app, ui, "Activity", AppsView::Activity, None, false);
     ui.add_space(4.0);
     if ui
         .add(egui::Button::new(RichText::new("+  Find on GitHub…").color(p.accent)).frame(false))
@@ -121,6 +122,10 @@ pub fn content(app: &mut OktoSpaceApp, ui: &mut Ui) {
     }
     if app.apps_view == AppsView::Updates {
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| updates(app, ui));
+        return;
+    }
+    if app.apps_view == AppsView::Activity {
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| activity(app, ui));
         return;
     }
     let p = app.palette;
@@ -485,9 +490,13 @@ fn action_row(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
     let id = s.app.id.clone();
     ui.horizontal(|ui| {
         let info = match (&s.installed, s.latest_version()) {
-            (Some(i), Some(l)) if s.update_available => format!("{} › {}", i.current.version, l),
+            (Some(i), _) if s.update_available => {
+                format!("{} › {}", i.current.label(), s.offered().unwrap_or_default())
+            }
             (Some(i), _) => {
-                let mut text = format!("Version {}", i.current.version);
+                let label = i.current.label();
+                let mut text =
+                    if label.starts_with(|c: char| c.is_ascii_digit()) { format!("Version {label}") } else { label };
                 if let Some(size) = i.current.size_bytes {
                     text.push_str(&format!(" · {}", format_bytes(size)));
                 }
@@ -586,6 +595,13 @@ pub fn more_menu(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
         if let Some(installed) = &s.installed {
             if s.update_available && ui.add_enabled(!busy, egui::Button::new("Update")).clicked() {
                 app.actions.push(Action::Update(id.clone()));
+            }
+            if s.update_available && s.head.is_none() {
+                if let Some(v) = s.latest_version() {
+                    if ui.button(format!("Skip {v}")).on_hover_text("No update until the release after it").clicked() {
+                        app.actions.push(Action::SkipVersion(id.clone()));
+                    }
+                }
             }
             if let Some(prev) = installed.previous.as_ref().filter(|_| !managed) {
                 if ui.add_enabled(!busy, egui::Button::new(format!("Roll back to {}", prev.version))).clicked() {
@@ -697,13 +713,16 @@ fn updates(app: &mut OktoSpaceApp, ui: &mut Ui) {
                 theme::badge(ui, &s.app, 44.0);
                 ui.vertical(|ui| {
                     ui.label(RichText::new(&s.app.name).size(16.0).strong());
-                    let from = s.installed_version().map(|v| v.to_string()).unwrap_or_default();
-                    let to = s.latest_version().map(|v| v.to_string()).unwrap_or_default();
-                    let date = s
-                        .latest
-                        .as_ref()
-                        .and_then(|r| r.date().map(|d| format!(" · released {d}")))
-                        .unwrap_or_default();
+                    let from = s.installed_label().unwrap_or_default();
+                    let to = s.offered().unwrap_or_default();
+                    let date = match &s.head {
+                        Some(h) => format!(" · {}", h.message),
+                        None => s
+                            .latest
+                            .as_ref()
+                            .and_then(|r| r.date().map(|d| format!(" · released {d}")))
+                            .unwrap_or_default(),
+                    };
                     ui.label(RichText::new(format!("{from}  ›  {to}{date}")).color(p.weak));
                 });
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -961,7 +980,7 @@ fn overview(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
                 ui.end_row();
             };
             if let Some(i) = &s.installed {
-                row(ui, "Installed", format!("{} ({})", i.current.version, i.current.kind.label()));
+                row(ui, "Installed", format!("{} ({})", i.current.label(), i.current.kind.label()));
                 if let Some(prev) = &i.previous {
                     row(ui, "Kept for rollback", prev.version.to_string());
                 }
@@ -980,23 +999,72 @@ fn overview(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
                     row(ui, "Last check", text);
                 }
             }
+            let now = oktospace_core::github::now_secs();
             match s.latest_version() {
-                Some(v) => row(
-                    ui,
-                    "Latest",
-                    format!(
-                        "{v}{}",
-                        s.latest.as_ref().and_then(|r| r.date()).map(|d| format!(" · {d}")).unwrap_or_default()
-                    ),
-                ),
+                Some(v) => {
+                    let published = s.latest.as_ref().and_then(|r| r.published_secs());
+                    let when =
+                        published.map(|t| format!(" · {}", oktospace_core::history::ago(t, now))).unwrap_or_default();
+                    ui.label(RichText::new("Latest").color(p.weak));
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(format!("{v}{when}"));
+                        // A project that hasn't released in a long time may be unmaintained.
+                        if published.is_some_and(|t| now.saturating_sub(t) > 2 * 365 * 86_400) {
+                            theme::chip(ui, "No release in over 2 years", p.warn);
+                        }
+                    });
+                    ui.end_row();
+                }
                 None if !s.known => row(ui, "Latest", "Checking…".into()),
                 None => row(ui, "Latest", "No release yet".into()),
+            }
+            if let Some(h) = &s.head {
+                row(
+                    ui,
+                    "Newest commit",
+                    format!("{} · {} · {}", h.short(), h.message, oktospace_core::history::ago(h.date, now)),
+                );
+            }
+            if let Some(v) = &s.skipped {
+                ui.label(RichText::new("Skipped").color(p.weak));
+                ui.horizontal(|ui| {
+                    ui.label(format!("{v}: no update until a newer release"));
+                    if ui.small_button("Offer it again").clicked() {
+                        app.actions.push(Action::Unskip(id.to_string()));
+                    }
+                });
+                ui.end_row();
             }
             if let Some((asset, kind)) = &s.installable {
                 let size = asset.size.map(|n| format!(" · {}", format_bytes(n))).unwrap_or_default();
                 let verified =
                     if asset.sha256.is_some() { " · SHA-256 verified" } else { " · no checksum published" };
                 row(ui, "Package", format!("{} ({}{size}{verified})", asset.name, kind.label()));
+            }
+            // Which file to download, when the release has several for different setups.
+            if let Some(latest) = s.latest.as_ref().filter(|r| r.assets.len() > 1 && !app.managed()) {
+                let choice = app.settings.assets.get(id).cloned();
+                ui.label(RichText::new("Download").color(p.weak));
+                let selected = match &choice {
+                    Some(c) => format!("Files with “{c}”"),
+                    None => "Automatic (best for this computer)".into(),
+                };
+                egui::ComboBox::from_id_salt(("asset", id)).selected_text(selected).width(320.0).show_ui(ui, |ui| {
+                    if ui.selectable_label(choice.is_none(), "Automatic (best for this computer)").clicked() {
+                        app.actions.push(Action::SetAssetChoice(id.to_string(), None));
+                    }
+                    for a in latest
+                        .assets
+                        .iter()
+                        .filter(|a| oktospace_core::platform::kind_from_name(&a.name.to_ascii_lowercase()).is_some())
+                    {
+                        let pattern = asset_pattern(&a.name, &latest.tag);
+                        if ui.selectable_label(choice.as_deref() == Some(pattern.as_str()), &a.name).clicked() {
+                            app.actions.push(Action::SetAssetChoice(id.to_string(), Some(pattern)));
+                        }
+                    }
+                });
+                ui.end_row();
             }
             // Update channel.
             ui.label(RichText::new("Updates").color(p.weak));
@@ -1017,6 +1085,10 @@ fn overview(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
                         let label = format!("Stay on {v}");
                         ui.selectable_value(&mut channel, Channel::Pinned(v), label);
                     }
+                    ui.selectable_value(&mut channel, Channel::Commits, "Latest commit (build from source)")
+                        .on_hover_text(
+                            "Build the newest commit of the default branch, and rebuild when there's a newer one",
+                        );
                 });
                 if channel != s.channel {
                     app.actions.push(Action::SetChannel(id.to_string(), channel));
@@ -1053,6 +1125,9 @@ fn overview(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
             app.actions.push(Action::VerifyAndRepair(id.to_string()));
         }
     });
+    if s.installed.is_some() {
+        launch_options(app, ui, id);
+    }
 
     // Everything that changed since the installed version (when more than one release).
     let since = if s.update_available { app.manager.releases_since(id) } else { Vec::new() };
@@ -1096,7 +1171,133 @@ fn overview(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
     }
 }
 
+/// The part of a file name that stays the same from release to release: what follows the
+/// version (`zed-1.2.0-linux-x86_64.tar.gz` → `-linux-x86_64.tar.gz`), or the whole name.
+fn asset_pattern(name: &str, tag: &str) -> String {
+    let version = tag.trim_start_matches(|c: char| !c.is_ascii_digit());
+    match name.find(version).filter(|_| !version.is_empty()) {
+        Some(i) if name[i + version.len()..].len() > 4 => name[i + version.len()..].to_string(),
+        _ => name.to_string(),
+    }
+}
+
+/// Arguments and environment variables the app starts with.
+fn launch_options(app: &mut OktoSpaceApp, ui: &mut Ui, id: &str) {
+    let p = app.palette;
+    let saved = app.settings.launch.get(id).cloned().unwrap_or_default();
+    ui.add_space(8.0);
+    egui::CollapsingHeader::new(if saved.is_empty() { "Launch options" } else { "Launch options (set)" })
+        .id_salt(("launch", id))
+        .show(ui, |ui| {
+            if app.launch_draft.as_ref().is_none_or(|(d, _)| d != id) {
+                app.launch_draft = Some((id.to_string(), saved.clone()));
+            }
+            let Some((_, draft)) = app.launch_draft.as_mut() else { return };
+            ui.label(RichText::new("Used when OktoSpace opens the app.").size(12.5).color(p.weak));
+            egui::Grid::new(("launch-grid", id)).num_columns(2).spacing([16.0, 6.0]).show(ui, |ui| {
+                ui.label(RichText::new("Arguments").color(p.weak));
+                ui.add(
+                    egui::TextEdit::singleline(&mut draft.args)
+                        .hint_text("--safe-mode \"my profile\"")
+                        .desired_width(360.0),
+                );
+                ui.end_row();
+                ui.label(RichText::new("Environment").color(p.weak));
+                ui.add(
+                    egui::TextEdit::multiline(&mut draft.env)
+                        .hint_text("NAME=value, one per line")
+                        .desired_rows(2)
+                        .desired_width(360.0),
+                );
+                ui.end_row();
+            });
+            let draft = draft.clone();
+            ui.horizontal(|ui| {
+                if ui.add_enabled(draft != saved, egui::Button::new("Save")).clicked() {
+                    app.actions.push(Action::SaveLaunchOptions(id.to_string(), draft.clone()));
+                }
+                if !saved.is_empty() && ui.button("Start plainly").clicked() {
+                    app.launch_draft = None;
+                    app.actions.push(Action::SaveLaunchOptions(id.to_string(), Default::default()));
+                }
+            });
+        });
+}
+
+/// Everything OktoSpace did, newest first, by day.
+fn activity(app: &mut OktoSpaceApp, ui: &mut Ui) {
+    let p = app.palette;
+    ui.heading("Activity");
+    ui.label(RichText::new("Installs, updates, builds, rollbacks and uninstalls, and what went wrong.").color(p.weak));
+    ui.add_space(10.0);
+    let events = app.manager.history(None);
+    if events.is_empty() {
+        ui.label(RichText::new("Nothing yet: what you install, update or build shows up here.").color(p.weak));
+        return;
+    }
+    let catalog = app.manager.catalog();
+    let now = oktospace_core::github::now_secs();
+    let mut day = u64::MAX;
+    for e in events.iter().take(300) {
+        let d = e.at / 86_400;
+        if d != day {
+            day = d;
+            ui.add_space(8.0);
+            let label = match now / 86_400 - d.min(now / 86_400) {
+                0 => "Today".to_string(),
+                1 => "Yesterday".to_string(),
+                n => format!("{n} days ago"),
+            };
+            sub_heading(ui, &p, &label);
+        }
+        let entry = catalog.apps.iter().find(|a| a.id == e.app);
+        theme::card_frame(&p, false).inner_margin(egui::Margin::symmetric(12, 8)).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                if let Some(a) = entry {
+                    if theme::badge(ui, a, 28.0).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+                        app.actions.push(Action::ShowApp(a.id.clone()));
+                    }
+                }
+                ui.vertical(|ui| {
+                    ui.label(RichText::new(entry.map(|a| a.name.as_str()).unwrap_or(&e.app)).strong());
+                    let color = if e.action == oktospace_core::history::Action::Failed { p.bad } else { p.weak };
+                    ui.add(egui::Label::new(RichText::new(e.summary()).size(12.5).color(color)).wrap());
+                });
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.label(RichText::new(oktospace_core::history::ago(e.at, now)).size(12.0).color(p.weak));
+                });
+            });
+        });
+        ui.add_space(4.0);
+    }
+}
+
+/// What OktoSpace did with this app.
+fn app_history(app: &mut OktoSpaceApp, ui: &mut Ui, id: &str) {
+    let events = app.manager.history(Some(id));
+    if events.is_empty() {
+        return;
+    }
+    let p = app.palette;
+    ui.add_space(14.0);
+    ui.label(RichText::new("History").size(17.0).strong());
+    let now = oktospace_core::github::now_secs();
+    for e in events.iter().take(12) {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(oktospace_core::history::ago(e.at, now)).size(12.5).color(p.weak));
+            let color = if e.action == oktospace_core::history::Action::Failed { p.bad } else { p.text };
+            ui.label(RichText::new(e.summary()).color(color));
+        });
+    }
+}
+
 fn versions(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
+    release_list(app, ui, s);
+    app_history(app, ui, &s.app.id);
+}
+
+fn release_list(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
     let p = app.palette;
     let id = s.app.id.as_str();
     let Some(list) = app.manager.releases(id) else {

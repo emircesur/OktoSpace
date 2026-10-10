@@ -21,3 +21,4 @@ clap = { version = "4", features = ["derive"] }
 serde_json.workspace = true
 open = "5"
 env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
+clap_complete = "4"

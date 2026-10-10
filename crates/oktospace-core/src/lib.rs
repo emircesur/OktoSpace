@@ -10,6 +10,7 @@ pub mod catalog;
 pub mod detect;
 pub mod download;
 pub mod github;
+pub mod history;
 pub mod http;
 pub mod integrate;
 pub mod manager;

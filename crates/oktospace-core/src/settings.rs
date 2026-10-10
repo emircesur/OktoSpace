@@ -76,6 +76,63 @@ pub struct Settings {
     pub favorites: Vec<String>,
     /// Per-app build options (what to build and how), by app id.
     pub builds: BTreeMap<String, BuildOptions>,
+    /// Updates the user skipped: no update is offered until a release newer than this one.
+    pub skipped: BTreeMap<String, semver::Version>,
+    /// The download to pick, by app id: part of the file name (e.g. `x86_64.AppImage`), used
+    /// instead of OktoSpace's own choice when a release has a file with it in its name.
+    pub assets: BTreeMap<String, String>,
+    /// How to start each app: arguments and environment variables.
+    pub launch: BTreeMap<String, LaunchOptions>,
+}
+
+/// Arguments and environment variables an app is started with.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LaunchOptions {
+    /// Arguments, as typed in a shell (quotes group words).
+    pub args: String,
+    /// `NAME=value` lines.
+    pub env: String,
+}
+
+impl LaunchOptions {
+    pub fn is_empty(&self) -> bool {
+        self.args.trim().is_empty() && self.env.trim().is_empty()
+    }
+
+    /// The arguments split into words: `--a "b c"` → `["--a", "b c"]`.
+    pub fn arg_list(&self) -> Vec<String> {
+        let (mut out, mut word, mut quote, mut any) = (Vec::new(), String::new(), None::<char>, false);
+        for c in self.args.chars() {
+            match (quote, c) {
+                (Some(q), c) if c == q => quote = None,
+                (Some(_), c) => word.push(c),
+                (None, '"' | '\'') => (quote, any) = (Some(c), true),
+                (None, c) if c.is_whitespace() => {
+                    if any || !word.is_empty() {
+                        out.push(std::mem::take(&mut word));
+                    }
+                    any = false;
+                }
+                (None, c) => word.push(c),
+            }
+        }
+        if any || !word.is_empty() {
+            out.push(word);
+        }
+        out
+    }
+
+    /// The `NAME=value` lines as pairs (blank lines and `#` comments are skipped).
+    pub fn env_list(&self) -> Vec<(String, String)> {
+        self.env
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .filter_map(|l| l.split_once('=').map(|(k, v)| (k.trim().to_string(), v.trim().to_string())))
+            .filter(|(k, _)| !k.is_empty())
+            .collect()
+    }
 }
 
 /// How to build an app from source, when the defaults aren't wanted.
@@ -148,6 +205,8 @@ pub enum Channel {
     Prerelease,
     /// Stay on this version: no updates are offered.
     Pinned(semver::Version),
+    /// Build the newest commit on the default branch, and rebuild when there's a newer one.
+    Commits,
 }
 
 impl Channel {
@@ -157,6 +216,7 @@ impl Channel {
             Channel::Stable => "Stable".into(),
             Channel::Prerelease => "Pre-release".into(),
             Channel::Pinned(v) => format!("Stay on {v}"),
+            Channel::Commits => "Latest commit".into(),
         }
     }
 }
@@ -193,6 +253,9 @@ impl Default for Settings {
             dock_icon: DockIcon::default(),
             favorites: Vec::new(),
             builds: BTreeMap::new(),
+            skipped: BTreeMap::new(),
+            assets: BTreeMap::new(),
+            launch: BTreeMap::new(),
         }
     }
 }
@@ -223,7 +286,7 @@ impl Settings {
         match self.channel(app_id) {
             Channel::Default => self.include_prereleases,
             Channel::Prerelease => true,
-            Channel::Stable | Channel::Pinned(_) => false,
+            Channel::Stable | Channel::Pinned(_) | Channel::Commits => false,
         }
     }
 
@@ -273,5 +336,20 @@ mod tests {
         let s = Settings::load(&path);
         assert!(s.auto_install_updates);
         assert!(s.auto_check_updates);
+    }
+
+    #[test]
+    fn launch_options_split_like_a_shell() {
+        let o = LaunchOptions {
+            args: r#"--profile "my work" -v '' x"#.into(),
+            env: "# c\nA=1\n\nB = two words\nbad".into(),
+        };
+        assert_eq!(o.arg_list(), ["--profile", "my work", "-v", "", "x"]);
+        assert_eq!(o.env_list(), [("A".to_string(), "1".to_string()), ("B".to_string(), "two words".to_string())]);
+        assert!(LaunchOptions::default().is_empty());
+        // The new channel is stored like the others.
+        let s = Settings { channels: [("x".to_string(), Channel::Commits)].into(), ..Settings::default() };
+        let back: Settings = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(back.channel("x"), Channel::Commits);
     }
 }

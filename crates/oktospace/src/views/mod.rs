@@ -4,6 +4,7 @@ pub mod discover;
 pub mod downloads;
 pub mod github;
 pub mod install_mode;
+pub mod palette;
 pub mod settings;
 pub mod sources;
 pub mod tour;

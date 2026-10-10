@@ -196,6 +196,60 @@ enum Command {
     Paths,
     /// Delete leftover downloads and folders from earlier updates.
     Cleanup,
+    /// What OktoSpace did: installs, updates, builds, rollbacks, uninstalls and failures.
+    History {
+        /// Only this app.
+        app: Option<String>,
+        /// How many entries (newest first).
+        #[arg(short = 'n', long, default_value_t = 30)]
+        limit: usize,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Skip the latest release of an app: no update is offered until a newer one.
+    Skip {
+        app: String,
+        /// Offer the skipped release again.
+        #[arg(long)]
+        undo: bool,
+    },
+    /// Choose which download to install for an app, by part of its file name
+    /// (`pick-file zed x86_64.AppImage`). Without a name: show the files and the choice;
+    /// `--auto` goes back to OktoSpace's own pick.
+    PickFile {
+        app: String,
+        pattern: Option<String>,
+        #[arg(long, conflicts_with = "pattern")]
+        auto: bool,
+    },
+    /// Arguments and environment variables an app starts with (from OktoSpace and its menu entry
+    /// alike). Without options: show them.
+    LaunchOptions {
+        app: String,
+        /// Arguments, as you'd type them in a shell.
+        #[arg(long, allow_hyphen_values = true)]
+        args: Option<String>,
+        /// NAME=value (repeat for more).
+        #[arg(long = "env", value_name = "NAME=VALUE")]
+        env: Vec<String>,
+        /// Start it plainly again.
+        #[arg(long)]
+        clear: bool,
+    },
+    /// How much disk space each app, its kept earlier version, downloads and builds use.
+    Storage {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Delete the earlier versions kept for rollback (of these apps, or all).
+    Trim { apps: Vec<String> },
+    /// Check this computer: build tools, PATH, GitHub access and OktoSpace's folders.
+    Doctor,
+    /// Print shell completions (`oktospace-cli completions bash > ~/.local/share/bash-completion/completions/oktospace-cli`).
+    Completions {
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
 }
 
 #[derive(Subcommand)]
@@ -214,6 +268,8 @@ enum ChannelArg {
     Stable,
     Prerelease,
     Pin,
+    /// Build the newest commit of the default branch (or the branch in its build options).
+    Commits,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -277,26 +333,6 @@ enum SourceAction {
     /// Update a library app, or OktoSpace itself (`oktospace`), from another repository:
     /// a fork, a mirror or a backup. `official` goes back to the official repository.
     Set { app: String, repo: String },
-}
-
-#[derive(Subcommand)]
-enum FileTypesAction {
-    /// Show which file types OktoSpace opens.
-    List,
-    /// Open these extensions (default: the apps' own formats) through OktoSpace.
-    On { extensions: Vec<String> },
-    /// Stop: files open in their apps directly again.
-    Off,
-}
-
-#[derive(Subcommand)]
-enum FontsAction {
-    /// The fonts on offer and which are installed.
-    List,
-    /// Install a font family, or all of them.
-    Install { family: Option<String> },
-    /// Remove a font family OktoSpace installed, or all of them.
-    Uninstall { family: Option<String> },
 }
 
 fn main() -> ExitCode {
@@ -460,7 +496,12 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
                 say!("Everything is up to date.");
             } else {
                 for s in &updates {
-                    println!("{:<12} {} → {}", s.app.id, fmt_opt(s.installed_version()), fmt_opt(s.latest_version()));
+                    println!(
+                        "{:<12} {} → {}",
+                        s.app.id,
+                        s.installed_label().unwrap_or_else(|| "-".into()),
+                        s.offered().unwrap_or_else(|| "-".into())
+                    );
                 }
                 return Ok(ExitCode::from(10));
             }
@@ -475,7 +516,9 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             let cancel = std::sync::atomic::AtomicBool::new(false);
             let report = |_e: ProgressEvent| {};
             let progress = Progress { report: &report, cancel: &cancel };
-            let record = manager.build(&id, version.as_ref(), &log, &progress)?;
+            let record = manager
+                .build(&id, version.as_ref(), &log, &progress)
+                .inspect_err(|e| manager.record_failure(&id, e))?;
             say!(
                 "Built and installed {} {}{}",
                 id,
@@ -516,6 +559,7 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
                         ChannelArg::Default => Channel::Default,
                         ChannelArg::Stable => Channel::Stable,
                         ChannelArg::Prerelease => Channel::Prerelease,
+                        ChannelArg::Commits => Channel::Commits,
                         ChannelArg::Pin => Channel::Pinned(
                             version
                                 .or_else(|| manager.installed_app(&entry.id).map(|i| i.current.version))
@@ -892,8 +936,205 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             let freed = manager.cleanup()?;
             say!("Freed {}.", format_bytes(freed));
         }
+        Command::History { app, limit, json } => {
+            let id = match &app {
+                Some(a) => Some(manager.app(a).with_context(|| format!("unknown app '{a}'"))?.id),
+                None => None,
+            };
+            let events: Vec<_> = manager.history(id.as_deref()).into_iter().take(limit).collect();
+            if json {
+                println!("{}", serde_json::to_string_pretty(&events)?);
+            } else if events.is_empty() {
+                say!("Nothing yet.");
+            } else {
+                let now = oktospace_core::github::now_secs();
+                for e in &events {
+                    println!("{:<16} {:<14} {}", oktospace_core::history::ago(e.at, now), e.app, e.summary());
+                }
+            }
+        }
+        Command::Skip { app, undo } => {
+            let entry = manager.app(&app).with_context(|| format!("unknown app '{app}'"))?;
+            if undo {
+                if manager.unskip(&entry.id)? {
+                    say!("{}: updates are offered again.", entry.name);
+                } else {
+                    say!("{}: no release was skipped.", entry.name);
+                }
+            } else {
+                if manager.releases(&entry.id).is_none() || cli.refresh {
+                    manager.refresh(&entry.id, cli.refresh)?;
+                }
+                let v = manager.skip_version(&entry.id)?;
+                say!("Skipped {} {v}: the next update offered is the release after it.", entry.name);
+            }
+        }
+        Command::PickFile { app, pattern, auto } => {
+            let entry = manager.app(&app).with_context(|| format!("unknown app '{app}'"))?;
+            if auto {
+                manager.set_asset_choice(&entry.id, None)?;
+                say!("{}: OktoSpace picks the download again.", entry.name);
+            } else if let Some(p) = pattern {
+                manager.set_asset_choice(&entry.id, Some(&p))?;
+                manager.refresh(&entry.id, cli.refresh)?;
+                match manager.state(&entry.id).and_then(|s| s.installable) {
+                    Some((asset, _)) if asset.name.to_ascii_lowercase().contains(&p.to_ascii_lowercase()) => {
+                        say!("{}: installs {} from now on.", entry.name, asset.name)
+                    }
+                    Some((asset, _)) => say!(
+                        "{}: no file of the latest release has '{p}' in its name, so it's {} for now; the choice is kept for later releases.",
+                        entry.name,
+                        asset.name
+                    ),
+                    None => say!("{}: choice saved ('{p}').", entry.name),
+                }
+            } else {
+                manager.refresh(&entry.id, cli.refresh)?;
+                let state = manager.state(&entry.id).context("unknown app")?;
+                let chosen = state.installable.as_ref().map(|(a, _)| a.name.clone());
+                match manager.settings().assets.get(&entry.id) {
+                    Some(p) => println!("Choice: files with '{p}' in their name"),
+                    None => println!("Choice: automatic"),
+                }
+                if let Some(latest) = &state.latest {
+                    println!("Files of {}:", latest.tag);
+                    for a in &latest.assets {
+                        let mark = if Some(&a.name) == chosen.as_ref() { "→" } else { " " };
+                        println!(
+                            " {mark} {}{}",
+                            a.name,
+                            a.size.map(|s| format!("  ({})", format_bytes(s))).unwrap_or_default()
+                        );
+                    }
+                }
+            }
+        }
+        Command::LaunchOptions { app, args, env, clear } => {
+            let entry = manager.app(&app).with_context(|| format!("unknown app '{app}'"))?;
+            let mut options = if clear { Default::default() } else { manager.launch_options(&entry.id) };
+            if clear || args.is_some() || !env.is_empty() {
+                if let Some(a) = args {
+                    options.args = a;
+                }
+                if !env.is_empty() {
+                    for pair in &env {
+                        anyhow::ensure!(pair.contains('='), "--env takes NAME=value, not '{pair}'");
+                    }
+                    options.env = env.join("\n");
+                }
+                manager.set_launch_options(&entry.id, options.clone())?;
+            }
+            if options.is_empty() {
+                say!("{} starts without extra arguments or environment variables.", entry.name);
+            } else {
+                println!("args: {}", options.args);
+                for (k, v) in options.env_list() {
+                    println!("env:  {k}={v}");
+                }
+            }
+        }
+        Command::Storage { json } => {
+            let storage = manager.storage();
+            if json {
+                println!("{}", serde_json::to_string_pretty(&storage)?);
+            } else {
+                let mut total = storage.downloads + storage.builds + storage.cache;
+                for a in &storage.apps {
+                    total += a.current + a.previous;
+                    let kept = if a.previous > 0 {
+                        format!("  (+{} earlier version)", format_bytes(a.previous))
+                    } else {
+                        String::new()
+                    };
+                    println!("{:<20} {:>10}{kept}", a.id, format_bytes(a.current));
+                }
+                println!("{:<20} {:>10}", "downloads", format_bytes(storage.downloads));
+                println!("{:<20} {:>10}", "build folders", format_bytes(storage.builds));
+                println!("{:<20} {:>10}", "cache", format_bytes(storage.cache));
+                println!("{:<20} {:>10}", "total", format_bytes(total));
+                let kept: u64 = storage.apps.iter().map(|a| a.previous).sum();
+                if kept > 0 {
+                    println!(
+                        "`oktospace-cli trim` frees {} of earlier versions; `cleanup` frees downloads and builds.",
+                        format_bytes(kept)
+                    );
+                }
+            }
+        }
+        Command::Trim { apps } => {
+            let ids: Vec<String> = if apps.is_empty() {
+                manager.installed().apps.into_values().filter(|a| a.previous.is_some()).map(|a| a.id).collect()
+            } else {
+                apps
+            };
+            let mut freed = 0;
+            for id in &ids {
+                freed += manager.remove_previous(id)?;
+            }
+            say!("Freed {} ({} apps).", format_bytes(freed), ids.len());
+        }
+        Command::Doctor => doctor(&manager),
+        Command::Completions { shell } => {
+            use clap::CommandFactory;
+            let mut script = Vec::new();
+            clap_complete::generate(shell, &mut Cli::command(), "oktospace-cli", &mut script);
+            // A closed pipe (`| head`) isn't an error worth a panic.
+            let _ = std::io::stdout().write_all(&script);
+        }
     }
     Ok(if failed > 0 { ExitCode::FAILURE } else { ExitCode::SUCCESS })
+}
+
+/// `oktospace-cli doctor`: what builds can use, whether apps' commands are on PATH, GitHub access.
+fn doctor(manager: &Manager) {
+    let ok = |b: bool| if b { "ok  " } else { "--  " };
+    println!("OktoSpace {} on {}", env!("CARGO_PKG_VERSION"), manager.platform().display());
+    println!("\nBuild tools");
+    for (tool, found) in oktospace_core::build::toolchains() {
+        match found {
+            Some(path) => println!(
+                "  {}{:<10} {}",
+                ok(true),
+                tool.name,
+                oktospace_core::build::tool_version(&path).unwrap_or_else(|| path.display().to_string())
+            ),
+            None => println!("  {}{:<10} not installed: {}", ok(false), tool.name, tool.url),
+        }
+    }
+    println!("\nThis computer");
+    #[cfg(target_os = "linux")]
+    {
+        let bin = std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/bin"));
+        let on_path = bin
+            .as_ref()
+            .is_some_and(|b| std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()).any(|p| p == *b));
+        println!(
+            "  {}~/.local/bin on PATH{}",
+            ok(on_path),
+            if on_path { "" } else { " (apps' commands go there; add it to PATH)" }
+        );
+    }
+    for (name, dir) in [("apps", manager.apps_root()), ("downloads", manager.paths().downloads())] {
+        let writable = std::fs::create_dir_all(&dir).is_ok() && tempfile_in(&dir);
+        println!("  {}{name} folder writable ({})", ok(writable), dir.display());
+    }
+    println!("\nGitHub");
+    let token = manager.settings().effective_github_token().is_some();
+    match manager.github().rate_limit() {
+        Ok((remaining, limit)) => println!(
+            "  {}API: {remaining} of {limit} requests left this hour{}",
+            ok(remaining > 0),
+            if token { " (with your token)" } else { "; add a token (config github_token …) for 5000" }
+        ),
+        Err(err) => println!("  {}API unreachable: {err:#}", ok(false)),
+    }
+}
+
+fn tempfile_in(dir: &Path) -> bool {
+    let probe = dir.join(".oktospace-write-test");
+    let ok = std::fs::write(&probe, b"").is_ok();
+    let _ = std::fs::remove_file(&probe);
+    ok
 }
 
 fn refresh_all(manager: &Manager, force: bool) {
@@ -926,11 +1167,29 @@ fn install_in(
     force: bool,
     dir: Option<&Path>,
 ) -> anyhow::Result<()> {
+    let result = install_in_inner(manager, app, version, refresh, force, dir);
+    if let (Err(err), Some(entry)) = (&result, manager.app(app)) {
+        manager.record_failure(&entry.id, err);
+    }
+    result
+}
+
+fn install_in_inner(
+    manager: &Manager,
+    app: &str,
+    version: Option<&Version>,
+    refresh: bool,
+    force: bool,
+    dir: Option<&Path>,
+) -> anyhow::Result<()> {
     if refresh {
         manager.refresh(app, true)?;
     }
-    // Built from source: an update builds it again.
-    if version.is_none() && manager.installed_app(app).is_some_and(|i| i.current.built_from_source()) {
+    // Built from source, or following commits: an update builds it again.
+    if version.is_none()
+        && (manager.installed_app(app).is_some_and(|i| i.current.built_from_source())
+            || manager.settings().channel(app) == Channel::Commits)
+    {
         let log = |line: String| println!("  {line}");
         let cancel = std::sync::atomic::AtomicBool::new(false);
         let report = |_e: ProgressEvent| {};
@@ -1030,10 +1289,6 @@ fn with_progress<R>(label: &str, f: impl FnOnce(&Progress) -> anyhow::Result<R>)
     result
 }
 
-fn fmt_opt(v: Option<&Version>) -> String {
-    v.map(|v| v.to_string()).unwrap_or_else(|| "-".into())
-}
-
 fn print_table(states: &[AppState]) {
     println!("{:<12} {:<11} {:<11} STATUS", "APP", "INSTALLED", "LATEST");
     for s in states {
@@ -1053,8 +1308,8 @@ fn print_table(states: &[AppState]) {
         println!(
             "{:<12} {:<11} {:<11} {status}",
             s.app.id,
-            fmt_opt(s.installed_version()),
-            fmt_opt(s.latest_version()),
+            s.installed_label().unwrap_or_else(|| "-".into()),
+            s.offered().unwrap_or_else(|| "-".into()),
         );
     }
 }

@@ -20,6 +20,10 @@ it from source**, and keeps it up to date. Written in Rust, for Windows, macOS a
   starred repositories, and add any of them in one click. Or type `owner/repo` yourself.
 - **Favorites**: heart an app to keep it in Favorites and hear about its new releases, even
   before you install it.
+- **Command palette** (Ctrl+K / ⌘K): type to jump to an app, install, update or open it, run any
+  command, or paste `owner/repo` to add a repository.
+- **Activity**: everything OktoSpace did (installs, updates, builds, rollbacks, uninstalls) and
+  what went wrong, by day and on each app's page.
 - Every app page has an Overview (stars, licence, the platforms it publishes for, how it builds,
   its website, and the screenshots from its README), **what's changed since your version** with
   the release notes in between, every version (install or switch to any of them), the README
@@ -44,7 +48,12 @@ it from source**, and keeps it up to date. Written in Rust, for Windows, macOS a
 - **Build options per app**: build a branch, tag or commit instead of the release, run your own
   build commands (one per line) when the recipe below doesn't fit, and point at the program
   they produce.
-- Downloads and build folders can be cleared from Settings (or `oktospace-cli cleanup`).
+- **Follow the latest commit**: an app's channel can be "Latest commit": OktoSpace builds the
+  newest commit of its default branch (or the branch in its build options) and rebuilds when a
+  newer one lands. Its page shows the commit it was built from and the newest one.
+- **Build tools** in Settings (and `oktospace-cli doctor`) show which toolchains are installed,
+  with links to the missing ones. A failed build's source tree is deleted, so it can't fill the
+  disk.
 
 | Found in the source | Builds with | Needs |
 |---|---|---|
@@ -61,7 +70,16 @@ it from source**, and keeps it up to date. Written in Rust, for Windows, macOS a
 **Updates**
 - Checks GitHub on start and every few hours, from the tray / menu bar even when the window is
   closed, and shows a notification when updates are found. It can install them automatically.
-- **Update channels per app**: stable releases, pre-releases too, or stay on a version.
+- **Update channels per app**: stable releases, pre-releases too, stay on a version, or the
+  latest commit.
+- **Skip a version**: no update is offered until the release after it.
+- **Choose the download**: when a release has several files for your computer (an AppImage and a
+  tarball, a setup program and a portable zip, a `.deb`…), pick one on the app's page; the choice
+  carries over to later releases.
+- **Launch options**: arguments and environment variables an app starts with.
+- **Storage**: how much space each app, its kept earlier version, downloads and builds use, with
+  buttons to free it (`oktospace-cli storage`, `trim`, `cleanup`).
+- Release ages on app pages, with a warning for projects that haven't released in over two years.
 - If an app is open, OktoSpace asks whether to update now (the new version is used next time) or
   **when it closes**, and waits for it.
 - **Delta updates** for AppImages that publish a `.zsync`: only the changed blocks download.
@@ -114,6 +132,13 @@ oktospace-cli list [--installed] [--json] # every app, installed version, latest
 oktospace-cli search markdown editor     # search GitHub, most starred first
 oktospace-cli favorites [add|remove zed] # list or change favorites
 oktospace-cli import-stars someone [--dry-run]  # add the apps among someone's GitHub stars
+oktospace-cli history [zed] [--json]     # what OktoSpace did
+oktospace-cli skip zed [--undo]          # skip the latest release
+oktospace-cli pick-file zed AppImage     # choose the download (no name: list the files; --auto)
+oktospace-cli launch-options zed --args "--foreground" --env RUST_LOG=info
+oktospace-cli storage [--json] | trim [apps…]   # disk use; delete versions kept for rollback
+oktospace-cli doctor                     # build tools, PATH, GitHub access
+oktospace-cli completions bash|zsh|fish|powershell|elvish
 oktospace-cli info zed
 oktospace-cli install zed localsend
 oktospace-cli install zed --version 0.200.0
@@ -123,7 +148,7 @@ oktospace-cli update                     # update everything (or name apps)
 oktospace-cli check                      # exit code 10 when updates are available
 oktospace-cli rollback zed
 oktospace-cli verify zed | repair zed
-oktospace-cli channel zed pin            # stay on this version (or stable / prerelease / default)
+oktospace-cli channel zed pin            # stay on this version (or stable / prerelease / commits / default)
 oktospace-cli launch zed
 oktospace-cli uninstall zed
 oktospace-cli source add owner/repo [--binary name] | list | check owner/repo | remove ID

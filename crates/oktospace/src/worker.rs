@@ -160,7 +160,15 @@ pub fn start(bus: &Bus, manager: &Manager, key: &str, job: &Job) {
             (Some(d), _) => format!(" (delta update: downloaded {})", format_bytes(d)),
             _ => String::new(),
         };
+        let follows_commits = manager.settings().channel(&key) == oktospace_core::settings::Channel::Commits;
         let result = match &kind {
+            // Following commits: installing builds the newest one.
+            JobKind::Install(None) if follows_commits => {
+                let log = |line: String| bus.send(Msg::BuildLog { key: key.clone(), line });
+                manager
+                    .update_app(&key, &log, &progress)
+                    .map(|r| format!("{name} {} was built from source and installed", r.current.label()))
+            }
             JobKind::Install(version) => manager
                 .plan(&key, version.as_ref())
                 .and_then(|mut plan| {
@@ -173,7 +181,7 @@ pub fn start(bus: &Bus, manager: &Manager, key: &str, job: &Job) {
                 let log = |line: String| bus.send(Msg::BuildLog { key: key.clone(), line });
                 manager
                     .update_app(&key, &log, &progress)
-                    .map(|r| format!("{name} was updated to {}{}", r.current.version, saved(&r)))
+                    .map(|r| format!("{name} was updated to {}{}", r.current.label(), saved(&r)))
             }
             JobKind::Repair => {
                 manager.repair(&key, &progress).map(|r| format!("{name} {} was repaired", r.current.version))
@@ -192,6 +200,9 @@ pub fn start(bus: &Bus, manager: &Manager, key: &str, job: &Job) {
                 "Cancelled".to_string()
             } else {
                 log::error!("{} {key}: {err:#}", kind.verb());
+                if manager.app(&key).is_some() {
+                    manager.record_failure(&key, &err);
+                }
                 format!("{err:#}")
             }
         });

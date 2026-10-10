@@ -29,6 +29,28 @@ test "$(installed photocraft version)" = "0.3.0"
 test ! -e "$XDG_BIN_HOME/photocraft"
 test -z "$(installed photocraft version)"
 
+# History, skipping a release, choosing the download, launch options, storage and trimming.
+"$cli" install photocraft --version 0.3.0
+"$cli" history photocraft | grep -q "Installed 0.3.0"
+"$cli" skip photocraft
+"$cli" check
+"$cli" skip photocraft --undo
+"$cli" check || test $? -eq 10
+"$cli" pick-file photocraft AppImage
+"$cli" update photocraft
+test "$(installed photocraft kind)" = "app-image"
+"$cli" pick-file photocraft --auto
+"$cli" launch-options photocraft --args "--safe-mode" --env PHOTO=1
+"$cli" launch-options photocraft | grep -q "PHOTO=1"
+"$cli" launch-options photocraft --clear
+"$cli" storage | grep -q photocraft
+"$cli" trim
+"$cli" storage --json | python3 -c "import json,sys; d=json.load(sys.stdin); assert all(a['previous'] == 0 for a in d['apps']), d"
+"$cli" history --json | python3 -c "import json,sys; a=[e['action'] for e in json.load(sys.stdin)]; assert {'installed','skipped','updated'} <= set(a), a"
+"$cli" doctor
+"$cli" completions bash | grep -q oktospace-cli
+"$cli" uninstall photocraft --yes
+
 # AppImage with a delta update from the .zsync file.
 "$cli" config prefer_appimage true
 "$cli" install photocraft --version 0.3.0

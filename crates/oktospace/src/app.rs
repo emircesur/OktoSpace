@@ -34,6 +34,8 @@ pub enum AppsView {
     Category(String),
     Detail(String),
     Favorites,
+    /// What OktoSpace did: installs, updates, builds, failures.
+    Activity,
 }
 
 /// How the App library is ordered.
@@ -80,6 +82,15 @@ pub enum Action {
     /// Build from source and install (the Build tab shows the log).
     Build(String),
     ToggleFavorite(String),
+    SkipVersion(String),
+    Unskip(String),
+    /// Pick the download by part of its file name (`None`: automatic).
+    SetAssetChoice(String, Option<String>),
+    SaveLaunchOptions(String, oktospace_core::settings::LaunchOptions),
+    /// Delete the earlier version kept for rollback.
+    TrimPrevious(String),
+    /// The command palette (Ctrl+K).
+    OpenPalette,
     /// Save an app's build options (Build tab).
     SaveBuildOptions(String, oktospace_core::settings::BuildOptions),
     /// The Find on GitHub window: open it, search, load a user's stars, add a repository.
@@ -185,6 +196,13 @@ pub struct OktoSpaceApp {
     pub github: Option<views::github::Dialog>,
     /// The build options being edited on the Build tab (app id, options).
     pub build_draft: Option<(String, oktospace_core::settings::BuildOptions)>,
+    /// The launch options being edited on an app page.
+    pub launch_draft: Option<(String, oktospace_core::settings::LaunchOptions)>,
+    /// The command palette (Ctrl+K), when open.
+    pub palette_open: Option<views::palette::CommandPalette>,
+    /// Settings › Storage and Build tools, measured when Settings opens.
+    pub storage: Option<oktospace_core::manager::Storage>,
+    pub toolchains: Option<Vec<(oktospace_core::build::Tool, Option<PathBuf>)>>,
     pub verify_results: HashMap<String, VerifyReport>,
     pub tours: HashMap<String, Result<oktospace_core::tour::Tour, String>>,
     tour_loading: HashSet<String>,
@@ -268,6 +286,10 @@ impl OktoSpaceApp {
             library_filter: LibraryFilter::All,
             github: None,
             build_draft: None,
+            launch_draft: None,
+            palette_open: None,
+            storage: None,
+            toolchains: None,
             verify_results: HashMap::new(),
             tours: HashMap::new(),
             tour_loading: HashSet::new(),
@@ -308,7 +330,7 @@ impl OktoSpaceApp {
                 cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
             }
         }
-        // `OKTOSPACE_VIEW=discover|updates|installed|app:<id>` opens a specific
+        // `OKTOSPACE_VIEW=discover|updates|installed|activity|favorites|settings|palette|about|app:<id>[:tab]` opens a specific
         // page (handy for screenshots and for jumping straight somewhere from a shortcut).
         if let Ok(view) = std::env::var("OKTOSPACE_VIEW") {
             match view.as_str() {
@@ -316,6 +338,10 @@ impl OktoSpaceApp {
                 "updates" => app.apps_view = AppsView::Updates,
                 "installed" => app.apps_view = AppsView::Installed,
                 "about" => app.about_open = true,
+                "activity" => app.apps_view = AppsView::Activity,
+                "favorites" => app.apps_view = AppsView::Favorites,
+                "settings" => app.actions.push(Action::OpenSettings),
+                "palette" => app.palette_open = Some(Default::default()),
                 other => {
                     if let Some(rest) = other.strip_prefix("app:") {
                         let (id, tab) = rest.split_once(':').unwrap_or((rest, ""));
@@ -937,6 +963,50 @@ impl OktoSpaceApp {
                     self.save_settings(s);
                     self.toast(ToastKind::Success, format!("Saved how to build {}", self.app_name(&id)));
                 }
+                Action::SkipVersion(id) => match self.manager.skip_version(&id) {
+                    Ok(v) => {
+                        self.settings = self.manager.settings();
+                        self.reload_states();
+                        self.toast(
+                            ToastKind::Info,
+                            format!("Skipped {} {v}: no update until the release after it", self.app_name(&id)),
+                        );
+                    }
+                    Err(err) => self.toast(ToastKind::Error, format!("{err:#}")),
+                },
+                Action::Unskip(id) => {
+                    if let Err(err) = self.manager.unskip(&id) {
+                        self.toast(ToastKind::Error, format!("{err:#}"));
+                    }
+                    self.settings = self.manager.settings();
+                    self.reload_states();
+                }
+                Action::SetAssetChoice(id, pattern) => match self.manager.set_asset_choice(&id, pattern.as_deref()) {
+                    Ok(()) => {
+                        self.settings = self.manager.settings();
+                        self.reload_states();
+                    }
+                    Err(err) => self.toast(ToastKind::Error, format!("{err:#}")),
+                },
+                Action::SaveLaunchOptions(id, options) => match self.manager.set_launch_options(&id, options) {
+                    Ok(()) => {
+                        self.settings = self.manager.settings();
+                        self.toast(ToastKind::Success, format!("Saved how {} starts", self.app_name(&id)));
+                    }
+                    Err(err) => self.toast(ToastKind::Error, format!("{err:#}")),
+                },
+                Action::TrimPrevious(id) => match self.manager.remove_previous(&id) {
+                    Ok(freed) => {
+                        self.reload_states();
+                        self.storage = Some(self.manager.storage());
+                        self.toast(
+                            ToastKind::Success,
+                            format!("Freed {}", oktospace_core::download::format_bytes(freed)),
+                        );
+                    }
+                    Err(err) => self.toast(ToastKind::Error, format!("{err:#}")),
+                },
+                Action::OpenPalette => self.palette_open = Some(Default::default()),
                 Action::OpenGithub => self.github = Some(Default::default()),
                 Action::SearchGithub(q) => {
                     if let Some(d) = &mut self.github {
@@ -1015,7 +1085,11 @@ impl OktoSpaceApp {
                     self.apps_view = view;
                 }
                 Action::Refresh => self.start_refresh(true, true),
-                Action::OpenSettings => self.settings_draft = Some(self.settings.clone()),
+                Action::OpenSettings => {
+                    self.settings_draft = Some(self.settings.clone());
+                    self.storage = Some(self.manager.storage());
+                    self.toolchains = Some(oktospace_core::build::toolchains());
+                }
                 Action::SaveSettings(mut s) => {
                     // The Settings window doesn't edit these (its own window does, maybe while
                     // Settings is open), so keep what's saved.
@@ -1023,6 +1097,16 @@ impl OktoSpaceApp {
                     let enabled = s.other_sources.enabled;
                     s.other_sources = self.settings.other_sources.clone();
                     s.other_sources.enabled = enabled;
+                    // Changed on app pages, maybe while Settings was open.
+                    let now = &self.settings;
+                    (s.favorites, s.builds, s.skipped, s.assets, s.launch, s.channels) = (
+                        now.favorites.clone(),
+                        now.builds.clone(),
+                        now.skipped.clone(),
+                        now.assets.clone(),
+                        now.launch.clone(),
+                        now.channels.clone(),
+                    );
                     self.save_settings(*s);
                 }
                 Action::ApplySelfUpdate => {
@@ -1084,19 +1168,31 @@ impl OktoSpaceApp {
                         self.actions.push(next);
                     }
                 }
-                Action::Cleanup => match self.manager.cleanup() {
-                    Ok(freed) => self
-                        .toast(ToastKind::Success, format!("Freed {}", oktospace_core::download::format_bytes(freed))),
-                    Err(err) => self.toast(ToastKind::Error, format!("{err:#}")),
-                },
+                Action::Cleanup => {
+                    match self.manager.cleanup() {
+                        Ok(freed) => self.toast(
+                            ToastKind::Success,
+                            format!("Freed {}", oktospace_core::download::format_bytes(freed)),
+                        ),
+                        Err(err) => self.toast(ToastKind::Error, format!("{err:#}")),
+                    }
+                    if self.settings_draft.is_some() {
+                        self.storage = Some(self.manager.storage());
+                    }
+                }
                 Action::SetChannel(id, channel) => {
                     let mut s = self.settings.clone();
+                    let commits = channel == Channel::Commits;
                     if channel == Channel::Default {
                         s.channels.remove(&id);
                     } else {
-                        s.channels.insert(id, channel);
+                        s.channels.insert(id.clone(), channel);
                     }
                     self.save_settings(s);
+                    // Following commits: look up the newest one now.
+                    if commits && self.releases_loading.insert(id.clone()) {
+                        worker::fetch_releases(&self.bus, &self.manager, &id);
+                    }
                 }
                 Action::ReportBug(id) => {
                     if let Some(url) = self.manager.bug_report_url(&id) {
@@ -1262,6 +1358,14 @@ impl OktoSpaceApp {
                         .desired_width(ui.available_width().clamp(120.0, 340.0))
                         .margin(Margin::symmetric(10, 6)),
                 );
+                let keys = if cfg!(target_os = "macos") { "⌘K" } else { "Ctrl+K" };
+                if ui
+                    .add(egui::Button::new(RichText::new(keys).size(12.0).color(self.palette.weak)).frame(false))
+                    .on_hover_text("Commands: jump to an app, install, update, open, or any command")
+                    .clicked()
+                {
+                    self.actions.push(Action::OpenPalette);
+                }
             });
         });
     }
@@ -1469,6 +1573,7 @@ impl OktoSpaceApp {
         views::about::window(self, ctx);
         views::sources::window(self, ctx);
         views::github::window(self, ctx);
+        views::palette::window(self, ctx);
         views::install_mode::window(self, ctx);
     }
 }
@@ -1523,6 +1628,15 @@ impl eframe::App for OktoSpaceApp {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+
+        // Keyboard: Ctrl/⌘+K the command palette, Ctrl/⌘+R check for updates.
+        use egui::{Key, KeyboardShortcut, Modifiers};
+        if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::K))) {
+            self.palette_open = if self.palette_open.is_some() { None } else { Some(Default::default()) };
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::R))) {
+            self.actions.push(Action::Refresh);
+        }
 
         // Theme.
         let system_light = ctx.system_theme() == Some(egui::Theme::Light);

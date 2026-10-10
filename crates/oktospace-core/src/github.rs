@@ -66,6 +66,51 @@ impl RepoHit {
     }
 }
 
+/// A commit, for apps that follow their default branch instead of releases.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Commit {
+    pub sha: String,
+    /// Unix seconds (the committer's date).
+    pub date: u64,
+    /// The first line of the commit message.
+    pub message: String,
+}
+
+impl Commit {
+    pub fn short(&self) -> &str {
+        &self.sha[..self.sha.len().min(7)]
+    }
+
+    fn from_json(v: &serde_json::Value) -> Option<Commit> {
+        let commit = v.get("commit")?;
+        let date = commit.pointer("/committer/date").and_then(|d| d.as_str()).and_then(parse_rfc3339).unwrap_or(0);
+        Some(Commit {
+            sha: v.get("sha")?.as_str()?.to_string(),
+            date,
+            message: commit.get("message")?.as_str()?.lines().next().unwrap_or_default().to_string(),
+        })
+    }
+}
+
+/// `2026-10-10T12:34:56Z` → Unix seconds.
+pub fn parse_rfc3339(s: &str) -> Option<u64> {
+    let b = s.as_bytes();
+    if b.len() < 19 {
+        return None;
+    }
+    let num = |r: std::ops::Range<usize>| s.get(r)?.parse::<i64>().ok();
+    let (y, m, d) = (num(0..4)?, num(5..7)?, num(8..10)?);
+    let (hh, mm, ss) = (num(11..13)?, num(14..16)?, num(17..19)?);
+    // Days from the civil date (Howard Hinnant's algorithm).
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    u64::try_from(days * 86_400 + hh * 3600 + mm * 60 + ss).ok()
+}
+
 /// Where a release list came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Source {
@@ -99,6 +144,11 @@ impl Release {
     /// The publish date as `YYYY-MM-DD`, when known.
     pub fn date(&self) -> Option<&str> {
         self.published_at.as_deref().and_then(|d| d.get(..10))
+    }
+
+    /// When it was published, in Unix seconds.
+    pub fn published_secs(&self) -> Option<u64> {
+        self.published_at.as_deref().and_then(parse_rfc3339)
     }
 }
 
@@ -230,6 +280,20 @@ impl GitHub {
         Ok(serde_json::from_slice(&resp.body_mut().with_config().limit(8 << 20).read_to_vec()?)?)
     }
 
+    /// GitHub API requests left this hour, and the hourly limit (asking doesn't count).
+    pub fn rate_limit(&self) -> anyhow::Result<(u64, u64)> {
+        let json = self.api_json("rate_limit")?;
+        let core = json.pointer("/resources/core").ok_or_else(|| anyhow::anyhow!("unexpected answer"))?;
+        let n = |k: &str| core.get(k).and_then(|v| v.as_u64()).unwrap_or(0);
+        Ok((n("remaining"), n("limit")))
+    }
+
+    /// The newest commit on `git_ref` (a branch, or `HEAD` for the default branch).
+    pub fn head_commit(&self, repo: &str, git_ref: &str) -> anyhow::Result<Commit> {
+        let json = self.api_json(&format!("repos/{repo}/commits/{git_ref}"))?;
+        Commit::from_json(&json).ok_or_else(|| anyhow::anyhow!("GitHub sent an unexpected answer for {repo}@{git_ref}"))
+    }
+
     /// Repositories matching `query`, most starred first.
     pub fn search_repos(&self, query: &str) -> anyhow::Result<Vec<RepoHit>> {
         let q: String = query
@@ -298,7 +362,20 @@ impl GitHub {
         check_status(&url, status)?;
         let etag = resp.headers().get("etag").and_then(|v| v.to_str().ok()).map(str::to_string);
         let api: Vec<ApiRelease> = resp.body_mut().with_config().limit(32 * 1024 * 1024).read_json()?;
+        let full_page = api.len() >= 30;
         let mut releases: Vec<Release> = api.into_iter().filter(|r| !r.draft).map(Release::from).collect();
+        // Projects that publish many pre-releases (dev builds, betas, release candidates) can
+        // fill a whole page with them: the latest stable release is then asked for by itself.
+        if full_page && !releases.iter().any(|r| !r.prerelease && r.version.is_some()) {
+            match self
+                .api_json(&format!("repos/{repo}/releases/latest"))
+                .and_then(|v| Ok(serde_json::from_value::<ApiRelease>(v)?))
+            {
+                Ok(latest) if !latest.draft => releases.push(Release::from(latest)),
+                Ok(_) => {}
+                Err(err) => log::debug!("no latest stable release for {repo}: {err:#}"),
+            }
+        }
         sort_releases(&mut releases);
         Ok(ReleaseList { repo: repo.into(), releases, source: Source::Api, fetched_at: now_secs(), etag })
     }
@@ -664,5 +741,19 @@ not a line
         let list = ReleaseList { repo: "x/y".into(), releases, source: Source::Api, fetched_at: 0, etag: None };
         assert_eq!(list.latest(false).unwrap().tag, "v0.5.0");
         assert_eq!(list.latest(true).unwrap().tag, "v0.6.0-rc.1");
+    }
+
+    #[test]
+    fn reads_commits_and_dates() {
+        assert_eq!(parse_rfc3339("1970-01-01T00:00:00Z"), Some(0));
+        assert_eq!(parse_rfc3339("2026-10-10T12:00:00Z"), Some(1_791_633_600));
+        assert_eq!(parse_rfc3339("2000-03-01T00:00:01Z"), Some(951_868_801));
+        assert_eq!(parse_rfc3339("nope"), None);
+        let json = serde_json::json!({
+            "sha": "0123456789abcdef",
+            "commit": {"message": "Fix the thing\n\nLonger text", "committer": {"date": "1970-01-02T00:00:00Z"}}
+        });
+        let c = Commit::from_json(&json).unwrap();
+        assert_eq!((c.short(), c.message.as_str(), c.date), ("0123456", "Fix the thing", 86_400));
     }
 }

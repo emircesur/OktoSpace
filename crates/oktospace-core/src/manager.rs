@@ -18,13 +18,14 @@ use crate::archive;
 use crate::catalog::{AppEntry, Catalog, REMOTE_CATALOG_URL};
 use crate::download::{self, Progress, ProgressEvent, Stage};
 use crate::github::{self, Asset, GitHub, Release, ReleaseList};
+use crate::history;
 use crate::http::{self, check_status};
 use crate::integrate;
 use crate::paths::{write_atomic, Paths};
 use crate::platform::{AssetKind, Os, Platform};
 use crate::policy::Policy;
 use crate::readme;
-use crate::settings::{Channel, Settings};
+use crate::settings::{Channel, LaunchOptions, Settings};
 use crate::state::{dir_size, InstalledApp, InstalledDb, InstalledVersion};
 use crate::zsync;
 
@@ -43,6 +44,8 @@ struct Inner {
     catalog: RwLock<Catalog>,
     installed: Mutex<InstalledDb>,
     releases: RwLock<HashMap<String, ReleaseList>>,
+    /// The newest commit of apps that follow their default branch ([`Channel::Commits`]).
+    heads: RwLock<HashMap<String, github::Commit>>,
     busy: Mutex<HashSet<String>>,
     /// Run installers without any UI.
     quiet: AtomicBool,
@@ -72,6 +75,10 @@ pub struct AppState {
     /// Release information has been fetched (or loaded from cache).
     pub known: bool,
     pub channel: Channel,
+    /// For apps following their default branch: its newest commit.
+    pub head: Option<github::Commit>,
+    /// The release the user skipped, when no newer one is out.
+    pub skipped: Option<Version>,
 }
 
 impl AppState {
@@ -82,6 +89,40 @@ impl AppState {
     pub fn latest_version(&self) -> Option<&Version> {
         self.latest.as_ref().and_then(|r| r.version.as_ref())
     }
+
+    /// What an update brings: the latest version, or the newest commit when following commits.
+    pub fn offered(&self) -> Option<String> {
+        match &self.head {
+            Some(h) => Some(format!("commit {}", h.short())),
+            None => self.latest_version().map(|v| v.to_string()),
+        }
+    }
+
+    /// The installed version as people read it ("1.2.0", "commit 1a2b3c4").
+    pub fn installed_label(&self) -> Option<String> {
+        self.installed.as_ref().map(|i| i.current.label())
+    }
+}
+
+/// Disk space used by OktoSpace ([`Manager::storage`]).
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Storage {
+    /// Installed apps, biggest first.
+    pub apps: Vec<AppStorage>,
+    /// Downloads kept after installing (and partial ones).
+    pub downloads: u64,
+    /// Sources and build folders left by builds.
+    pub builds: u64,
+    /// Release information, icons, READMEs and screenshots.
+    pub cache: u64,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct AppStorage {
+    pub id: String,
+    pub current: u64,
+    /// The earlier version kept for rollback.
+    pub previous: u64,
 }
 
 /// The result of checking an installed app's files.
@@ -183,6 +224,7 @@ impl Manager {
                 catalog: RwLock::new(catalog),
                 installed: Mutex::new(installed),
                 releases: RwLock::new(releases),
+                heads: RwLock::new(HashMap::new()),
                 busy: Mutex::new(HashSet::new()),
                 paths,
             }),
@@ -468,9 +510,38 @@ impl Manager {
     /// Fetch releases for one app.
     pub fn refresh(&self, id: &str, force: bool) -> anyhow::Result<ReleaseList> {
         let app = self.require_app(id)?;
-        let list = self.github().releases(&app.repo, force)?;
+        let head = if self.settings().channel(id) == Channel::Commits { Some(self.head_commit(id)) } else { None };
+        let list = match (self.github().releases(&app.repo, force), head) {
+            (Ok(list), _) => list,
+            // Following commits, releases are only for show.
+            (Err(_), Some(Ok(_))) => ReleaseList {
+                repo: app.repo.clone(),
+                releases: Vec::new(),
+                source: github::Source::Cache,
+                fetched_at: github::now_secs(),
+                etag: None,
+            },
+            (Err(err), _) => return Err(err),
+        };
         self.inner.releases.write().unwrap().insert(app.id.clone(), list.clone());
         Ok(list)
+    }
+
+    /// The newest commit `id` would build when following commits: on the branch chosen in its
+    /// build options, or its default branch.
+    pub fn head_commit(&self, id: &str) -> anyhow::Result<github::Commit> {
+        let app = self.require_app(id)?;
+        let branch = self
+            .settings()
+            .builds
+            .get(id)
+            .and_then(|b| b.git_ref.clone())
+            .map(|r| r.trim().to_string())
+            .filter(|r| !r.is_empty())
+            .unwrap_or_else(|| "HEAD".into());
+        let commit = self.github().head_commit(&app.repo, &branch)?;
+        self.inner.heads.write().unwrap().insert(id.to_string(), commit.clone());
+        Ok(commit)
     }
 
     /// Fetch releases for every app in parallel. Returns the apps that failed.
@@ -542,6 +613,48 @@ impl Manager {
         prefs
     }
 
+    /// The download for `app` among a release's files: the one chosen in its settings (part of
+    /// the file name) when there is one, OktoSpace's own pick otherwise.
+    fn pick_asset(
+        &self,
+        app: &AppEntry,
+        settings: &Settings,
+        names: &[&str],
+        installed: Option<&InstalledApp>,
+    ) -> Option<(usize, AssetKind)> {
+        if let Some(wanted) =
+            settings.assets.get(&app.id).map(|w| w.trim().to_ascii_lowercase()).filter(|w| !w.is_empty())
+        {
+            let matching: Vec<usize> = (0..names.len())
+                .filter(|&i| {
+                    let lower = names[i].to_ascii_lowercase();
+                    lower.contains(&wanted) && crate::platform::kind_from_name(&lower).is_some()
+                })
+                .collect();
+            // Among the matching files, the one for this computer (its architecture), then any.
+            let subset: Vec<&str> = matching.iter().map(|&i| names[i]).collect();
+            let mut prefs = self.prefs_for(app, settings, installed);
+            for kind in subset.iter().filter_map(|n| crate::platform::kind_from_name(&n.to_ascii_lowercase())) {
+                match kind {
+                    AssetKind::AppImage => prefs.prefer_appimage = true,
+                    AssetKind::Msi => prefs.prefer_system_installer = true,
+                    AssetKind::Exe => (prefs.prefer_system_installer, prefs.prefer_exe_installer) = (true, true),
+                    AssetKind::Rpm | AssetKind::Deb => {
+                        (prefs.prefer_system_installer, prefs.linux_package) = (true, Some(kind))
+                    }
+                    _ => {}
+                }
+            }
+            if let Some((j, kind)) = self.inner.platform.select_asset(&app.id, &subset, prefs) {
+                return Some((matching[j], kind));
+            }
+            if let Some(&i) = matching.first() {
+                return crate::platform::kind_from_name(&names[i].to_ascii_lowercase()).map(|k| (i, k));
+            }
+        }
+        self.inner.platform.select_asset(&app.id, names, self.prefs_for(app, settings, installed))
+    }
+
     pub fn state(&self, id: &str) -> Option<AppState> {
         let app = self.app(id)?;
         let settings = self.settings();
@@ -551,19 +664,32 @@ impl Manager {
         let latest =
             list.as_ref().and_then(|l| l.latest(self.wants_prereleases(&settings, id, installed.as_ref()))).cloned();
         let installable = latest.as_ref().and_then(|r| {
-            self.inner
-                .platform
-                .select_asset(&app.id, &r.asset_names(), self.prefs_for(&app, &settings, installed.as_ref()))
+            self.pick_asset(&app, &settings, &r.asset_names(), installed.as_ref())
                 .map(|(i, kind)| (r.assets[i].clone(), kind))
         });
+        let head = (channel == Channel::Commits).then(|| self.inner.heads.read().unwrap().get(id).cloned()).flatten();
+        let latest_v = latest.as_ref().and_then(|r| r.version.as_ref());
+        let skipped = settings.skipped.get(id).filter(|s| latest_v.is_none_or(|l| l <= *s)).cloned();
         let from_flatpak =
             installed.as_ref().is_some_and(|i| i.current.external.as_ref().is_some_and(|e| e.flatpak.is_some()));
-        let update_available = match (&installed, latest.as_ref().and_then(|r| r.version.as_ref())) {
+        let update_available = match (&installed, latest_v) {
             (_, _) if matches!(channel, Channel::Pinned(_)) || from_flatpak => false,
-            (Some(i), Some(latest)) => installable.is_some() && latest > &i.current.version,
+            // Following the default branch: a newer commit than the one it was built from.
+            (Some(i), _) if channel == Channel::Commits => head.as_ref().is_some_and(|h| h.sha != i.current.tag),
+            (Some(i), Some(latest)) => installable.is_some() && latest > &i.current.version && skipped.is_none(),
             _ => false,
         };
-        Some(AppState { app, installed, latest, installable, update_available, known: list.is_some(), channel })
+        Some(AppState {
+            app,
+            installed,
+            latest,
+            installable,
+            update_available,
+            known: list.is_some() || head.is_some(),
+            channel,
+            head,
+            skipped,
+        })
     }
 
     pub fn states(&self) -> Vec<AppState> {
@@ -779,9 +905,8 @@ impl Manager {
         if installed.as_ref().is_some_and(|i| i.current.external.as_ref().is_some_and(|e| e.flatpak.is_some())) {
             anyhow::bail!("{} is installed from Flatpak, which keeps it up to date (flatpak update)", app.name);
         }
-        let prefs = self.prefs_for(&app, &settings, installed.as_ref());
         let (index, kind) =
-            self.inner.platform.select_asset(&app.id, &release.asset_names(), prefs).ok_or_else(|| {
+            self.pick_asset(&app, &settings, &release.asset_names(), installed.as_ref()).ok_or_else(|| {
                 anyhow::anyhow!("{} {} has no build for {}", app.name, release.tag, self.inner.platform.display())
             })?;
         if release.assets[index].sha256.is_none() {
@@ -806,6 +931,24 @@ impl Manager {
 
     /// Download, verify and install `plan`, replacing (and optionally keeping) the current version.
     pub fn install(&self, plan: &Plan, progress: &Progress) -> anyhow::Result<InstalledApp> {
+        let before = self.installed_app(&plan.app.id).map(|i| (i.current.version.clone(), i.current.label()));
+        let record = self.install_plan(plan, progress)?;
+        let action = if plan.asset.name.ends_with("-built.tar.gz") {
+            history::Action::Built
+        } else {
+            match &before {
+                Some((v, _)) if *v == record.current.version => history::Action::Repaired,
+                Some(_) => history::Action::Updated,
+                None => history::Action::Installed,
+            }
+        };
+        self.record(
+            history::Event::new(&plan.app.id, action).version(record.current.label()).from(before.map(|b| b.1)),
+        );
+        Ok(record)
+    }
+
+    fn install_plan(&self, plan: &Plan, progress: &Progress) -> anyhow::Result<InstalledApp> {
         let _busy = self.mark_busy(&plan.app.id)?;
         let settings = self.settings();
         let version = plan
@@ -1001,6 +1144,12 @@ impl Manager {
     /// How `id` builds from source, once its source is downloaded: see [`Manager::build`].
     /// The release to build: `version`, or the latest (the default branch when there's none).
     fn build_source(&self, app: &AppEntry, version: Option<&Version>) -> anyhow::Result<(String, Version)> {
+        // Following commits: the newest one, versioned by its day and short hash.
+        if version.is_none() && self.settings().channel(&app.id) == Channel::Commits {
+            let head = self.head_commit(&app.id)?;
+            let version = Version::parse(&format!("0.0.0-source.{}+{}", head.date / 86_400, head.short()))?;
+            return Ok((head.sha, version));
+        }
         // A branch, tag or commit chosen in the app's build options.
         let chosen = self.settings().builds.get(&app.id).and_then(|b| b.git_ref.clone());
         if let Some(git_ref) = chosen.map(|r| r.trim().to_string()).filter(|r| !r.is_empty()) {
@@ -1042,7 +1191,6 @@ impl Manager {
         progress: &Progress,
     ) -> anyhow::Result<InstalledApp> {
         let app = self.require_app(id)?;
-        let os = self.inner.platform.os;
         progress.stage(Stage::Resolving);
         let (tag, version) = self.build_source(&app, version)?;
         log(format!("Building {} {version} from {} ({tag})", app.name, app.repo));
@@ -1061,11 +1209,28 @@ impl Manager {
         download::download(&self.inner.agent, &url, &tarball, None, progress)?;
         archive::unpack(&tarball, &src, progress)?;
         let _ = std::fs::remove_file(&tarball);
+        let result = self.build_in(&app, &tag, &version, &src, log, progress);
+        // The source and its build tree can take gigabytes: gone either way (a retry downloads
+        // the source again; the log shows what happened).
+        let _ = std::fs::remove_dir_all(&src);
+        result
+    }
+
+    fn build_in(
+        &self,
+        app: &AppEntry,
+        tag: &str,
+        version: &Version,
+        src: &Path,
+        log: &(dyn Fn(String) + Sync),
+        progress: &Progress,
+    ) -> anyhow::Result<InstalledApp> {
+        let os = self.inner.platform.os;
 
         let options = self.settings().builds.get(&app.id).cloned().unwrap_or_default();
         let recipe = match options.commands.as_deref().filter(|c| !c.trim().is_empty()) {
             Some(commands) => crate::build::custom(commands, options.output.as_deref()),
-            None => crate::build::detect(&src, os).ok_or_else(|| {
+            None => crate::build::detect(src, os).ok_or_else(|| {
                 anyhow::anyhow!(
                     "OktoSpace doesn't know how to build {} (no build system it recognises); give it the commands in the app's Build tab",
                     app.name
@@ -1079,9 +1244,9 @@ impl Manager {
         }
         log(format!("Build system: {}", recipe.system.label()));
         progress.stage(Stage::Building);
-        crate::build::run(&recipe, &src, log, progress)?;
+        crate::build::run(&recipe, src, log, progress)?;
 
-        let program = crate::build::find_output(&src, &recipe, app.binary(), os)
+        let program = crate::build::find_output(src, &recipe, app.binary(), os)
             .ok_or_else(|| anyhow::anyhow!("the build finished, but OktoSpace couldn't find the program it made"))?;
         log(format!("Built {}", program.display()));
 
@@ -1095,7 +1260,7 @@ impl Manager {
         let plan = Plan {
             app: app.clone(),
             release: Release {
-                tag: tag.clone(),
+                tag: tag.to_string(),
                 name: format!("{} {version} (built from source)", app.name),
                 version: Some(version.clone()),
                 prerelease: !version.pre.is_empty(),
@@ -1108,9 +1273,7 @@ impl Manager {
             kind: AssetKind::TarGz,
             location: None,
         };
-        let installed = self.install(&plan, progress)?;
-        let _ = std::fs::remove_dir_all(&src);
-        Ok(installed)
+        self.install(&plan, progress)
     }
 
     /// Update an app: built from source, it's built again; otherwise the new release is installed.
@@ -1120,7 +1283,9 @@ impl Manager {
         log: &(dyn Fn(String) + Sync),
         progress: &Progress,
     ) -> anyhow::Result<InstalledApp> {
-        if self.installed_app(id).is_some_and(|i| i.current.built_from_source()) {
+        if self.installed_app(id).is_some_and(|i| i.current.built_from_source())
+            || self.settings().channel(id) == Channel::Commits
+        {
             return self.build(id, None, log, progress);
         }
         let plan = self.plan(id, None)?;
@@ -1168,6 +1333,124 @@ impl Manager {
     /// The repositories a GitHub user starred.
     pub fn starred(&self, user: &str) -> anyhow::Result<Vec<github::RepoHit>> {
         self.github().starred(user)
+    }
+
+    // ---- history -----------------------------------------------------------------------------
+
+    fn history_path(&self) -> PathBuf {
+        self.inner.paths.root.join("history.jsonl")
+    }
+
+    /// Add an event to the history (failures to write it are only logged).
+    pub fn record(&self, event: history::Event) {
+        if let Err(err) = history::append(&self.history_path(), &event) {
+            log::warn!("couldn't write the history: {err:#}");
+        }
+    }
+
+    /// Record that changing `id` failed.
+    pub fn record_failure(&self, id: &str, err: &anyhow::Error) {
+        let first = format!("{err:#}");
+        self.record(history::Event::new(id, history::Action::Failed).detail(first.lines().next().unwrap_or_default()));
+    }
+
+    /// What OktoSpace did, newest first; only `id`'s events when given.
+    pub fn history(&self, id: Option<&str>) -> Vec<history::Event> {
+        let mut all = history::load(&self.history_path());
+        all.retain(|e| id.is_none_or(|id| e.app == id));
+        all.reverse();
+        all
+    }
+
+    // ---- per-app choices ---------------------------------------------------------------------
+
+    /// Skip the latest release of `id`: no update is offered until a newer one. Returns it.
+    pub fn skip_version(&self, id: &str) -> anyhow::Result<Version> {
+        let state = self.state(id).ok_or_else(|| anyhow::anyhow!("no app called {id}"))?;
+        let latest = state
+            .latest_version()
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("{} has no release to skip", state.app.name))?;
+        let mut settings = self.inner.settings.read().unwrap().clone();
+        settings.skipped.insert(id.to_string(), latest.clone());
+        self.set_settings(settings)?;
+        self.record(history::Event::new(id, history::Action::Skipped).version(&latest));
+        Ok(latest)
+    }
+
+    /// Offer the skipped release again.
+    pub fn unskip(&self, id: &str) -> anyhow::Result<bool> {
+        let mut settings = self.inner.settings.read().unwrap().clone();
+        let had = settings.skipped.remove(id).is_some();
+        self.set_settings(settings)?;
+        Ok(had)
+    }
+
+    /// Choose the download for `id` by part of its file name, or `None` for OktoSpace's pick.
+    pub fn set_asset_choice(&self, id: &str, pattern: Option<&str>) -> anyhow::Result<()> {
+        self.require_app(id)?;
+        let mut settings = self.inner.settings.read().unwrap().clone();
+        match pattern.map(str::trim).filter(|p| !p.is_empty()) {
+            Some(p) => settings.assets.insert(id.to_string(), p.to_string()),
+            None => settings.assets.remove(id),
+        };
+        self.set_settings(settings)
+    }
+
+    /// The arguments and environment `id` starts with.
+    pub fn launch_options(&self, id: &str) -> LaunchOptions {
+        self.settings().launch.get(id).cloned().unwrap_or_default()
+    }
+
+    pub fn set_launch_options(&self, id: &str, options: LaunchOptions) -> anyhow::Result<()> {
+        self.require_app(id)?;
+        let mut settings = self.inner.settings.read().unwrap().clone();
+        if options.is_empty() {
+            settings.launch.remove(id);
+        } else {
+            settings.launch.insert(id.to_string(), options);
+        }
+        self.set_settings(settings)
+    }
+
+    // ---- storage -----------------------------------------------------------------------------
+
+    /// How much disk space OktoSpace uses, app by app.
+    pub fn storage(&self) -> Storage {
+        let db = self.installed();
+        let size = |v: &InstalledVersion| {
+            v.dir.as_ref().filter(|d| d.exists()).map(|d| dir_size(d)).or(v.size_bytes).unwrap_or(0)
+        };
+        let mut apps: Vec<AppStorage> = db
+            .apps
+            .values()
+            .map(|a| AppStorage {
+                id: a.id.clone(),
+                current: size(&a.current),
+                previous: a.previous.as_ref().map(size).unwrap_or(0),
+            })
+            .collect();
+        apps.sort_by_key(|a| std::cmp::Reverse(a.current + a.previous));
+        let builds = dir_size(&self.inner.paths.cache.join("builds"));
+        let downloads = dir_size(&self.inner.paths.downloads());
+        Storage { apps, downloads, builds, cache: dir_size(&self.inner.paths.cache).saturating_sub(builds + downloads) }
+    }
+
+    /// Delete the earlier version kept for rollback. Returns the bytes freed.
+    pub fn remove_previous(&self, id: &str) -> anyhow::Result<u64> {
+        let _busy = self.mark_busy(id)?;
+        self.with_db(|db| {
+            let Some(app) = db.apps.get_mut(id) else { return 0 };
+            let Some(prev) = app.previous.take() else { return 0 };
+            let freed = prev.dir.as_ref().map(|d| dir_size(d)).unwrap_or(0);
+            if let Some(dir) = prev.dir.filter(|d| Some(d) != app.current.dir.as_ref()) {
+                db.remove_dir_or_defer(&dir);
+            }
+            if let Some(pkg) = prev.package {
+                let _ = std::fs::remove_file(pkg);
+            }
+            freed
+        })
     }
 
     /// Build the new AppImage from the installed one plus the changed blocks, when the release
@@ -1376,6 +1659,13 @@ impl Manager {
 
     /// Switch back to the version kept by the last update.
     pub fn rollback(&self, id: &str) -> anyhow::Result<InstalledApp> {
+        let before = self.installed_app(id).map(|i| i.current.label());
+        let record = self.rollback_inner(id)?;
+        self.record(history::Event::new(id, history::Action::RolledBack).version(record.current.label()).from(before));
+        Ok(record)
+    }
+
+    fn rollback_inner(&self, id: &str) -> anyhow::Result<InstalledApp> {
         self.guard_managed("going back to an earlier version")?;
         let _busy = self.mark_busy(id)?;
         let app = self.require_app(id)?;
@@ -1421,6 +1711,17 @@ impl Manager {
 
     /// Remove an app, its shortcuts and every version OktoSpace kept.
     pub fn uninstall(&self, id: &str) -> anyhow::Result<()> {
+        let version = self.installed_app(id).map(|i| i.current.label());
+        self.uninstall_inner(id)?;
+        let mut event = history::Event::new(id, history::Action::Uninstalled);
+        if let Some(v) = version {
+            event = event.version(v);
+        }
+        self.record(event);
+        Ok(())
+    }
+
+    fn uninstall_inner(&self, id: &str) -> anyhow::Result<()> {
         let _busy = self.mark_busy(id)?;
         let installed = self.installed_app(id).ok_or_else(|| anyhow::anyhow!("{id} is not installed"))?;
         self.guard_managed("uninstalling")?;
@@ -1712,16 +2013,18 @@ impl Manager {
             return Ok(());
         }
         anyhow::ensure!(exe.exists(), "{} is missing; repair or reinstall {}", exe.display(), app.name);
+        let options = self.launch_options(id);
         let mut cmd = if exe.is_dir() {
             integrate::macos::launch_command(&exe, files)
         } else {
             let mut cmd = std::process::Command::new(&exe);
-            cmd.args(files);
+            cmd.args(options.arg_list()).args(files);
             if let Some(dir) = exe.parent() {
                 cmd.current_dir(dir);
             }
             cmd
         };
+        cmd.envs(options.env_list());
         cmd.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
         #[cfg(windows)]
         {
@@ -2320,6 +2623,117 @@ mod tests {
         let tags: Vec<String> = m.releases_since("photocraft").into_iter().map(|r| r.tag).collect();
         assert_eq!(tags, ["v0.6.0", "v0.5.0"]);
         assert!(m.releases_since("gridcraft").is_empty());
+    }
+
+    #[test]
+    fn history_skipping_storage_and_choices() {
+        let tmp = tempfile::tempdir().unwrap();
+        let m = manager(tmp.path());
+        no_progress(|p| m.install(&local_plan(&m, "0.4.0"), p)).unwrap();
+        no_progress(|p| m.install(&local_plan(&m, "0.5.0"), p)).unwrap();
+        m.rollback("photocraft").unwrap();
+        let history = m.history(Some("photocraft"));
+        let summaries: Vec<String> = history.iter().map(|e| e.summary()).collect();
+        assert_eq!(summaries, ["Rolled back 0.5.0 › 0.4.0", "Updated 0.4.0 › 0.5.0", "Installed 0.4.0"]);
+        assert!(m.history(Some("gridcraft")).is_empty());
+
+        // Storage: both versions, then the kept one removed.
+        let storage = m.storage();
+        assert_eq!(storage.apps.len(), 1);
+        assert!(storage.apps[0].current > 0 && storage.apps[0].previous > 0);
+        assert!(m.remove_previous("photocraft").unwrap() > 0);
+        assert!(m.installed_app("photocraft").unwrap().previous.is_none());
+        assert_eq!(m.storage().apps[0].previous, 0);
+
+        // A newer release is offered until it's skipped, and again once a newer one is out.
+        let token = m.platform().token().unwrap();
+        let ext = if m.platform().os == Os::Windows { "-portable.zip" } else { ".tar.gz" };
+        let release = |v: &str| Release {
+            tag: format!("v{v}"),
+            name: format!("v{v}"),
+            version: Some(Version::parse(v).unwrap()),
+            prerelease: false,
+            published_at: Some("2026-10-01T00:00:00Z".into()),
+            body: String::new(),
+            html_url: String::new(),
+            assets: vec![
+                Asset { name: format!("photocraft-{v}-{token}{ext}"), size: None, url: String::new(), sha256: None },
+                Asset {
+                    name: format!("photocraft-{v}-special-{token}{ext}"),
+                    size: None,
+                    url: String::new(),
+                    sha256: None,
+                },
+            ],
+        };
+        let set = |releases: Vec<Release>| {
+            m.inner.releases.write().unwrap().insert(
+                "photocraft".into(),
+                ReleaseList { repo: "x/y".into(), releases, source: github::Source::Api, fetched_at: 0, etag: None },
+            )
+        };
+        set(vec![release("0.6.0")]);
+        assert!(m.state("photocraft").unwrap().update_available);
+        assert_eq!(m.skip_version("photocraft").unwrap(), Version::new(0, 6, 0));
+        let state = m.state("photocraft").unwrap();
+        assert!(!state.update_available);
+        assert_eq!(state.skipped, Some(Version::new(0, 6, 0)));
+        set(vec![release("0.6.0"), release("0.7.0")]);
+        assert!(m.state("photocraft").unwrap().update_available);
+        assert!(m.unskip("photocraft").unwrap());
+
+        // Choosing the download by part of its name.
+        assert_eq!(
+            m.state("photocraft").unwrap().installable.unwrap().0.name,
+            format!("photocraft-0.7.0-{token}{ext}")
+        );
+        m.set_asset_choice("photocraft", Some("SPECIAL")).unwrap();
+        // (with a build for another architecture listed first, which isn't picked)
+        let other = if token.contains("arm64") || token.contains("aarch64") { "x86_64" } else { "aarch64" };
+        let mut r = release("0.7.0");
+        r.assets.insert(
+            0,
+            Asset {
+                name: format!("photocraft-0.7.0-special-linux-{other}.tar.gz"),
+                size: None,
+                url: String::new(),
+                sha256: None,
+            },
+        );
+        set(vec![r]);
+        assert_eq!(
+            m.state("photocraft").unwrap().installable.unwrap().0.name,
+            format!("photocraft-0.7.0-special-{token}{ext}")
+        );
+        // A choice no file matches falls back to OktoSpace's pick.
+        m.set_asset_choice("photocraft", Some("nothing-like-this")).unwrap();
+        assert_eq!(
+            m.state("photocraft").unwrap().installable.unwrap().0.name,
+            format!("photocraft-0.7.0-{token}{ext}")
+        );
+        m.set_asset_choice("photocraft", None).unwrap();
+        assert!(m.settings().assets.is_empty());
+
+        // Following commits: an update when the branch has a commit it wasn't built from.
+        let mut settings = m.settings();
+        settings.channels.insert("photocraft".into(), Channel::Commits);
+        m.set_settings(settings).unwrap();
+        assert!(!m.state("photocraft").unwrap().update_available, "no commit known yet");
+        m.inner
+            .heads
+            .write()
+            .unwrap()
+            .insert("photocraft".into(), github::Commit { sha: "abcdef1234".into(), date: 0, message: "Fix".into() });
+        let state = m.state("photocraft").unwrap();
+        assert!(state.update_available);
+        assert_eq!(state.head.unwrap().short(), "abcdef1");
+
+        // Launch options are kept per app, and empty ones are forgotten.
+        let opts = LaunchOptions { args: "--safe-mode".into(), env: String::new() };
+        m.set_launch_options("photocraft", opts.clone()).unwrap();
+        assert_eq!(m.launch_options("photocraft"), opts);
+        m.set_launch_options("photocraft", LaunchOptions::default()).unwrap();
+        assert!(m.settings().launch.is_empty());
     }
 
     #[test]
