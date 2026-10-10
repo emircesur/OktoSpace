@@ -142,6 +142,9 @@ pub struct OktoSpaceApp {
 
     pub readmes: HashMap<String, Result<String, String>>,
     readme_loading: HashSet<String>,
+    /// Apps whose releases are being fetched, or couldn't be (with why).
+    pub releases_loading: HashSet<String>,
+    pub releases_failed: HashMap<String, String>,
     pub verify_results: HashMap<String, VerifyReport>,
     pub tours: HashMap<String, Result<oktospace_core::tour::Tour, String>>,
     tour_loading: HashSet<String>,
@@ -217,6 +220,8 @@ impl OktoSpaceApp {
             pinned_queued: Default::default(),
             readmes: HashMap::new(),
             readme_loading: HashSet::new(),
+            releases_loading: HashSet::new(),
+            releases_failed: HashMap::new(),
             verify_results: HashMap::new(),
             tours: HashMap::new(),
             tour_loading: HashSet::new(),
@@ -416,6 +421,13 @@ impl OktoSpaceApp {
                     self.after_refresh(ctx, manual);
                 }
                 Msg::Icons(ids) => theme::load_icons(ctx, &self.manager, Some(&ids)),
+                Msg::Releases(id, result) => {
+                    self.releases_loading.remove(&id);
+                    if let Err(err) = result {
+                        self.releases_failed.insert(id, err);
+                    }
+                    reload = true;
+                }
                 Msg::Readme(id, result) => {
                     self.readme_loading.remove(&id);
                     self.readmes.insert(id, result);
@@ -669,6 +681,14 @@ impl OktoSpaceApp {
         self.waiting_for_close = still;
         for (id, kind) in ready {
             self.start_job(&id, kind);
+        }
+    }
+
+    /// Fetch an app's releases if nothing is known about them yet.
+    pub fn ensure_releases(&mut self, id: &str) {
+        let known = self.state(id).is_some_and(|s| s.known);
+        if !known && !self.releases_failed.contains_key(id) && self.releases_loading.insert(id.to_string()) {
+            worker::fetch_releases(&self.bus, &self.manager, id);
         }
     }
 

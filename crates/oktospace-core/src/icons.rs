@@ -17,7 +17,7 @@ pub fn cache_path(paths: &Paths, app_id: &str) -> PathBuf {
 
 /// The cached icon, if any (however old).
 pub fn cached(paths: &Paths, app_id: &str) -> Option<Vec<u8>> {
-    std::fs::read(cache_path(paths, app_id)).ok().filter(|b| is_png(b))
+    std::fs::read(cache_path(paths, app_id)).ok().filter(|b| is_image(b))
 }
 
 /// Fetch `app`'s icon unless a fresh copy is cached. Returns the PNG bytes.
@@ -34,11 +34,14 @@ pub fn fetch(agent: &Agent, paths: &Paths, app: &AppEntry) -> anyhow::Result<Opt
     let mut resp = agent.get(url).call()?;
     crate::http::check_status(url, resp.status().as_u16())?;
     let bytes = resp.body_mut().with_config().limit(8 << 20).read_to_vec()?;
-    anyhow::ensure!(is_png(&bytes), "{url} is not a PNG");
+    anyhow::ensure!(is_image(&bytes), "{url} is not a PNG, JPEG or WebP picture");
     write_atomic(&path, &bytes)?;
     Ok(Some(bytes))
 }
 
-fn is_png(bytes: &[u8]) -> bool {
+/// PNG (the apps' own icons), or JPEG and WebP (GitHub avatars).
+fn is_image(bytes: &[u8]) -> bool {
     bytes.starts_with(b"\x89PNG\r\n\x1a\n")
+        || bytes.starts_with(&[0xFF, 0xD8, 0xFF])
+        || (bytes.len() > 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP")
 }

@@ -91,6 +91,7 @@ pub enum Msg {
     },
     Icons(Vec<String>),
     Readme(String, Result<String, String>),
+    Releases(String, Result<(), String>),
     Verified(String, Result<VerifyReport, String>),
     Tour(String, Result<oktospace_core::tour::Tour, String>),
     Shot(String, Result<egui::ColorImage, String>),
@@ -209,6 +210,15 @@ pub fn refresh(bus: &Bus, manager: &Manager, force: bool, manual: bool) {
         if let Ok(found) = selfupdate::check(&manager) {
             bus.send(Msg::SelfUpdateFound(found.map(Box::new)));
         }
+    });
+}
+
+/// Fetch one app's releases (apps a refresh doesn't check, when their page opens).
+pub fn fetch_releases(bus: &Bus, manager: &Manager, id: &str) {
+    let (manager, id) = (manager.clone(), id.to_string());
+    bus.spawn("releases", move |bus| {
+        let result = manager.refresh(&id, false).map(|_| ()).map_err(|e| format!("{e:#}"));
+        bus.send(Msg::Releases(id, result));
     });
 }
 

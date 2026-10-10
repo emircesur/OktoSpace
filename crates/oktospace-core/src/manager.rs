@@ -452,8 +452,23 @@ impl Manager {
     }
 
     /// Fetch releases for every app in parallel. Returns the apps that failed.
+    /// The apps a refresh checks: installed, curated and added ones (every app in a small
+    /// library). The rest of a big library is checked when someone opens it ([`Self::refresh`]),
+    /// so a refresh stays within GitHub's limits.
+    pub fn checked_apps(&self) -> Vec<String> {
+        let catalog = self.catalog();
+        let installed = self.inner.installed.lock().unwrap().apps.keys().cloned().collect::<HashSet<_>>();
+        let small = catalog.apps.len() <= 60;
+        catalog
+            .apps
+            .into_iter()
+            .filter(|a| small || a.curated || a.custom || a.featured || installed.contains(&a.id))
+            .map(|a| a.id)
+            .collect()
+    }
+
     pub fn refresh_all(&self, force: bool) -> Vec<(String, anyhow::Error)> {
-        let ids: Vec<String> = self.catalog().apps.into_iter().map(|a| a.id).collect();
+        let ids = self.checked_apps();
         let errors = Mutex::new(Vec::new());
         std::thread::scope(|scope| {
             for chunk in ids.chunks(ids.len().div_ceil(6).max(1)) {
@@ -1613,25 +1628,26 @@ impl Manager {
     /// Download icons that aren't cached (or are old). Returns the apps whose icon changed.
     pub fn fetch_icons(&self) -> Vec<String> {
         let apps = self.catalog().apps;
+        let changed = Mutex::new(Vec::new());
+        // A few at a time: a big library has hundreds.
         std::thread::scope(|scope| {
-            let handles: Vec<_> = apps
-                .iter()
-                .map(|app| {
-                    scope.spawn(move || {
+            for chunk in apps.chunks(apps.len().div_ceil(8).max(1)) {
+                let changed = &changed;
+                scope.spawn(move || {
+                    for app in chunk {
                         let before = self.icon(&app.id);
                         match crate::icons::fetch(&self.inner.agent, &self.inner.paths, app) {
-                            Ok(Some(bytes)) if before.as_ref() != Some(&bytes) => Some(app.id.clone()),
-                            Ok(_) => None,
-                            Err(err) => {
-                                log::info!("no icon for {}: {err:#}", app.id);
-                                None
+                            Ok(Some(bytes)) if before.as_ref() != Some(&bytes) => {
+                                changed.lock().unwrap().push(app.id.clone())
                             }
+                            Ok(_) => {}
+                            Err(err) => log::info!("no icon for {}: {err:#}", app.id),
                         }
-                    })
-                })
-                .collect();
-            handles.into_iter().filter_map(|h| h.join().ok().flatten()).collect()
-        })
+                    }
+                });
+            }
+        });
+        changed.into_inner().unwrap()
     }
 
     pub fn readme(&self, id: &str) -> anyhow::Result<String> {

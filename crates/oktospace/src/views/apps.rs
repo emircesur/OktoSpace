@@ -213,7 +213,9 @@ fn self_install_banner(app: &mut OktoSpaceApp, ui: &mut Ui) {
 
 fn offline_banner(app: &mut OktoSpaceApp, ui: &mut Ui) {
     let p = app.palette;
-    let unknown: Vec<String> = app.states.iter().filter(|s| !s.known).map(|s| s.app.name.clone()).collect();
+    let checked: std::collections::HashSet<String> = app.manager.checked_apps().into_iter().collect();
+    let unknown: Vec<String> =
+        app.states.iter().filter(|s| !s.known && checked.contains(&s.app.id)).map(|s| s.app.name.clone()).collect();
     if app.refreshing || unknown.is_empty() || app.refresh_errors.is_empty() {
         return;
     }
@@ -360,6 +362,44 @@ fn job_row_for(app: &mut OktoSpaceApp, ui: &mut Ui, id: &str) -> bool {
     false
 }
 
+/// What the library knows about an app whose releases haven't been looked at yet: its stars, the
+/// platforms its last release had downloads for, and whether it builds from source.
+fn library_info(app: &oktospace_core::AppEntry) -> String {
+    let mut parts = Vec::new();
+    if let Some(stars) = app.stars {
+        parts.push(format!("★ {}", short_count(stars)));
+    }
+    let names: Vec<&str> = app
+        .platforms
+        .iter()
+        .map(|p| match p.as_str() {
+            "windows" => "Windows",
+            "macos" => "macOS",
+            "linux" => "Linux",
+            other => other,
+        })
+        .collect();
+    if !names.is_empty() {
+        parts.push(names.join(", "));
+    } else if app.build.is_some() {
+        parts.push("builds from source".into());
+    }
+    if parts.is_empty() {
+        "See its releases".into()
+    } else {
+        parts.join(" · ")
+    }
+}
+
+/// 1234 → "1.2k", 1234567 → "1.2M".
+pub fn short_count(n: u64) -> String {
+    match n {
+        0..=999 => n.to_string(),
+        1_000..=999_999 => format!("{:.1}k", n as f64 / 1e3).replace(".0k", "k"),
+        _ => format!("{:.1}M", n as f64 / 1e6).replace(".0M", "M"),
+    }
+}
+
 /// The version line plus the ⋯ menu and main button.
 fn action_row(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
     let p = app.palette;
@@ -375,7 +415,9 @@ fn action_row(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
                 },
                 None => format!("{l} · not for this platform"),
             },
-            (None, None) if !s.known => "Checking…".into(),
+            (None, None) if app.releases_loading.contains(&s.app.id) => "Checking…".into(),
+            (None, None) if !s.known => library_info(&s.app),
+            (None, None) if s.app.build.is_some() => "No release yet · builds from source".into(),
             (None, None) => "No release yet".into(),
         };
         ui.label(RichText::new(info).size(12.5).color(p.weak));
@@ -403,6 +445,12 @@ pub fn main_button(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
     } else if s.installable.is_some() {
         if theme::primary(ui, &p, "Install").clicked() {
             app.actions.push(Action::Install(id, None));
+        }
+    } else if !s.known || s.app.build.is_some() {
+        // Not looked at yet, or nothing to download for this computer: its page has the
+        // releases and building from source.
+        if theme::pill(ui, &p, "Details").clicked() {
+            app.actions.push(Action::ShowApp(id));
         }
     } else if theme::pill(ui, &p, "Learn more").clicked() {
         app.actions.push(Action::OpenUrl(s.app.homepage()));
@@ -573,6 +621,7 @@ fn updates(app: &mut OktoSpaceApp, ui: &mut Ui) {
 
 fn detail(app: &mut OktoSpaceApp, ui: &mut Ui, id: &str) {
     let p = app.palette;
+    app.ensure_releases(id);
     let Some(s) = app.state(id).cloned() else {
         ui.label("This app is no longer in the catalog.");
         return;
