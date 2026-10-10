@@ -2,129 +2,91 @@
 
 # OktoSpace
 
-An independent installer and update manager for the open-source
-[ArtCraft](https://github.com/storytold) creative apps (PhotoCraft, LightCraft, VectorCraft,
-DesignCraft, PdfCraft, FilmCraft, EffectCraft, SoundCraft, WordCraft, DeckCraft, GridCraft,
-CADCraft and ArtCraft). It's written in Rust and runs on Windows, macOS and Linux.
-
+An app store, updater and builder for apps on GitHub. Pick an app from the **App library** (over
+300 open-source apps) or add any repository: OktoSpace installs it from its releases, or **builds
+it from source**, and keeps it up to date. Written in Rust, for Windows, macOS and Linux.
 
 ![App library](docs/screenshots/apps.png)
 
 ## What it does
 
-**Apps**
-- Browse every ArtCraft app (with its own icon) by category; install, open, update, roll back,
-  repair or uninstall it with one click. Installs are per user and need no admin rights.
-- **Install several** apps at once. Downloads queue (two at a time by default) and share one
-  **Downloads** panel with combined progress. Interrupted downloads resume where they stopped,
-  and you can cap the download speed.
-- **App pages** open with a **screenshot tour**: the screenshots, description and feature list
-  each app publishes in its AppStream metainfo file (plus the pictures in its README), in a
-  carousel you can page through.
-- Every app page also has an Overview, every version (install or switch to any of them), release notes
-  and the app's **README**, plus **Report a problem**, which opens a GitHub issue already filled in
-  with the app version, package and OS.
-- **Update channels per app**: follow stable releases, include pre-releases, or stay on a version.
-- **Verify and repair**: checks every installed file against what was installed and reinstalls
-  if anything is missing or changed.
-- **Fonts & add-ons**: installs the [craft-fonts](https://github.com/storytold/craft-fonts)
-  families (Japanese, Chinese, Arabic) for your user account, checksum-verified, so every app can
-  use them. Add-ons (palettes, LUT looks, LightCraft presets, PhotoCraft plug-ins, SoundCraft
-  audio plug-ins) install where each app finds them, from the
-  [OktoSpace add-on registry](addons/README.md) and, listed separately, add-on repositories
-  such as the [ArtCraft Store](https://github.com/akkk09/artcraft-store). Add any repository by
-  typing `owner/repo`; [anyone can make one](addons/README.md#oktospace-compatible-add-on-repos).
-  Only OktoSpace's own packs are
-  marked **checked**; everything else says **not checked for security** and asks first.
-  Anyone can [submit an add-on](addons/README.md#submitting-an-add-on).
-- **Workspace sync**: save an app's workspaces, layouts, keyboard shortcuts, preferences and
-  presets to a `.craftprofile` file and bring them into the app on another computer, choosing
-  which parts. Recent files, window positions, folder paths and devices stay on each computer;
-  sign-ins, API keys and digital IDs are never included. The current setup is saved first, so
-  an import can be undone.
+**App library**
+- Over 300 open-source apps by category (AI, developer tools, productivity, creative,
+  infrastructure, games and more), sorted by popularity, with their stars, licence and the
+  platforms they publish for. Search by name, description or repository.
+- **Add any GitHub repository** (`owner/repo`): it joins the library and is installed and updated
+  the same way.
+- Every app page has an Overview with the screenshots from its README, every version (install or
+  switch to any of them), release notes, the README itself, and a **Build** tab.
+
+**Install from releases**
+- OktoSpace picks the right download for your computer from a release's files: portable zips,
+  tarballs, AppImages, disk images, MSIs, setup programs, `.deb` and `.rpm`, matched by the
+  operating system and architecture in their names.
+- Installs are per user and need no admin rights. Versions install side by side, so an update
+  never leaves a half-written app behind and the previous version is kept for rollback.
+- Every download is checked against the SHA-256 GitHub (or the release's checksum file)
+  publishes before anything is unpacked.
+
+**Build from source**
+- For apps with nothing to download for your computer, or when you'd rather build it yourself:
+  OktoSpace downloads the source of the latest release (or of the default branch when there's no
+  release), recognises its build system, checks that the tools it needs are installed, and builds
+  it with the output streamed live.
+- The program it builds is installed like a download: menu entry, updates, rollback, uninstall.
+
+| Found in the source | Builds with | Needs |
+|---|---|---|
+| `Cargo.toml` | `cargo build --release` | [Rust](https://rustup.rs) |
+| `go.mod` | `go build` (each `cmd/*`, or the module) | [Go](https://go.dev/dl/) |
+| `build.zig` | `zig build -Doptimize=ReleaseSafe` | [Zig](https://ziglang.org/download/) |
+| `CMakeLists.txt` | `cmake` configure + build, Release | [CMake](https://cmake.org/download/) and a compiler |
+| `meson.build` | `meson setup` + `meson compile` | [Meson](https://mesonbuild.com) and Ninja |
+| `Package.swift` | `swift build -c release` | [Swift](https://www.swift.org/install/) |
+| `*.sln`, `*.csproj` | `dotnet publish -c Release` | [.NET SDK](https://dotnet.microsoft.com/download) |
+| `package.json` | `npm ci`, then its `tauri build`, `dist`, `package`, `make` or `build` script | [Node.js](https://nodejs.org) |
+| `Makefile` | `make` | Make and a compiler |
 
 **Updates**
 - Checks GitHub on start and every few hours, from the tray / menu bar even when the window is
   closed, and shows a notification when updates are found. It can install them automatically.
-- If an app is open, OktoSpace asks whether to update now (the new version is used next time:
-  versions install side by side) or **when it closes**, and waits for it.
-- Keeps the previous version for rollback.
-- **Delta updates** for AppImages: the old AppImage plus the release's `.zsync` file rebuild the
-  new one, downloading only the blocks that changed. When too little of the old file can be
-  reused (a rebuilt app), it downloads the whole file instead.
-- **Start at login**, quietly in the tray. If the desktop's tray (panel) starts after OktoSpace,
-  the icon appears as soon as it's up; on a desktop without a tray the window is minimized
-  instead, so it can always be found. Settings has a **Send a test** button for notifications.
-
-**Files and Discover**
-- **Files**: recent and pinned documents in your folders that an ArtCraft app can open, with
-  **Open**, **Open with**, **Show in folder** and **Start something new** tiles. If a file needs
-  an app you don't have, it offers **Get <App>**.
-- **Discover**: a featured app, the latest releases across all apps, **news and tutorials** from
-  getartcraft.com, apps to try, and community links.
-
-**Safe by default**
-- Every download is checked against the SHA-256 that GitHub (or the release's `SHA256SUMS.txt`)
-  publishes before anything is unpacked. Packages without a checksum are refused unless you allow
-  them in Settings.
-- When GitHub's API is rate limited or blocked, OktoSpace finds the latest release through
-  `github.com/<repo>/releases/latest/download/SHA256SUMS.txt` instead, and falls back to its cache
-  when offline.
+- **Update channels per app**: stable releases, pre-releases too, or stay on a version.
+- If an app is open, OktoSpace asks whether to update now (the new version is used next time) or
+  **when it closes**, and waits for it.
+- **Delta updates** for AppImages that publish a `.zsync`: only the changed blocks download.
+- **Verify and repair**: checks every installed file and reinstalls if anything changed.
+- A big library is checked sensibly: installed apps on every check, the rest when you open them,
+  so GitHub's rate limits aren't a problem (add a token in Settings for more).
 
 **For IT and classrooms**: a machine-wide policy file, a quiet command line, `install --all`,
-app-list export/import (see [below](#managing-many-computers)).
+app-list export/import and a shared package cache (see [below](#managing-many-computers)).
 
-| Discover | App details |
+| App page | Build from source |
 |---|---|
-| ![Discover](docs/screenshots/discover.png) | ![App details](docs/screenshots/app-details.png) |
-| **Files** | **Fonts & add-ons** |
-| ![Files](docs/screenshots/files.png) | ![Fonts & add-ons](docs/screenshots/addons.png) |
+| ![App page](docs/screenshots/app-details.png) | ![Build from source](docs/screenshots/build.png) |
+| **Discover** | |
+| ![Discover](docs/screenshots/discover.png) | |
 
 ## Install OktoSpace
 
-**Windows:** with [winget](https://learn.microsoft.com/windows/package-manager/) (once the
-package is accepted into winget's catalog):
-
-```powershell
-winget install emircesur.OktoSpace
-winget upgrade emircesur.OktoSpace    # or `winget upgrade --all`
-```
-
-Or download `oktospace-<version>-windows-x64-setup.exe` (or `-arm64`) from
+**Windows:** download `oktospace-<version>-windows-x64-setup.exe` (or `-arm64`) from
 [Releases](https://github.com/emircesur/OktoSpace/releases) and run it: it installs for you
 only, without administrator rights. For a copy that runs from any folder, take the
-`-portable.zip` instead; it offers to install itself the first time. Installed either way (or
-through winget), OktoSpace updates itself, and winget sees the new version too.
+`-portable.zip`; it offers to install itself the first time.
 
 **macOS:** download `oktospace-<version>-macos-universal.dmg`, open it and drag OktoSpace to
-Applications. Until the releases are notarized (the release workflow does it once the Apple
-secrets are added), right-click it the first time and choose **Open**.
+Applications. Until the releases are notarized, right-click it the first time and choose **Open**.
 
-**Fedora, RHEL, openSUSE:** install `oktospace-<version>-linux-x86_64.rpm` (or `aarch64`):
-
-```sh
-sudo dnf install ./oktospace-0.1.0-linux-x86_64.rpm
-```
-
-Once the [Copr repository](#fedora-copr) is set up, `dnf` keeps OktoSpace up to date instead:
-
-```sh
-sudo dnf copr enable emircesur/OktoSpace
-sudo dnf install oktospace
-```
+**Fedora, RHEL, openSUSE:** `sudo dnf install ./oktospace-<version>-linux-x86_64.rpm` (or `aarch64`).
 
 **Debian, Ubuntu:** `sudo apt install ./oktospace-<version>-linux-x86_64.deb`.
 
-**Any Linux (AppImage):** download `oktospace-<version>-linux-x86_64.AppImage` (or `aarch64`),
-make it executable and run it:
+**Any Linux (AppImage):**
 
 ```sh
 chmod +x oktospace-*-linux-x86_64.AppImage && ./oktospace-*-linux-x86_64.AppImage
 ./oktospace-*-linux-x86_64.AppImage --cli list      # the command line, from the same file
 ```
-
-It offers to add itself to your app menu (keeping a copy in OktoSpace's folder) and updates
-that copy itself. The AppImage also carries update information for AppImageUpdate.
 
 **Any Linux (script):**
 
@@ -132,75 +94,32 @@ that copy itself. The AppImage also carries update information for AppImageUpdat
 curl -fsSL https://raw.githubusercontent.com/emircesur/OktoSpace/HEAD/install.sh | sh
 ```
 
-This downloads the latest tarball, checks its checksum, and runs `oktospace-cli self-install`,
-which adds OktoSpace to your app menu and links `oktospace` and `oktospace-cli` into
-`~/.local/bin`.
-
-Installed from an `.rpm` or `.deb`, OktoSpace leaves its own updates to the package manager.
-
-## How apps are installed
-
-ArtCraft releases follow one naming scheme, `<app>-<version>-<platform>[-portable].<ext>`, with a
-`SHA256SUMS.txt` next to them. OktoSpace picks the right file for your machine:
-
-| | Preferred | Also understood |
-|---|---|---|
-| Windows x64 / ARM64 / x86 | `…-windows-x64-portable.zip` | `.msi`, setup `.exe` (ArtCraft's NSIS installer) |
-| macOS (Intel and Apple silicon) | `…-macos-universal.dmg` | |
-| Linux x86_64 / aarch64 | `…-linux-x86_64.tar.gz` | `.AppImage` (with delta updates), `.rpm`, `.deb` |
-
-Portable zips, tarballs, AppImages and disk images are unpacked side by side, one folder per
-version, so an update never leaves a half-written app behind and the previous version can be
-kept for rollback:
-
-| | Windows | macOS | Linux |
-|---|---|---|---|
-| Apps | `%LOCALAPPDATA%\OktoSpace\Apps\<app>\<version>` | current version in `~/Applications`, older ones in `~/Library/Application Support/OktoSpace` | `~/.local/share/oktospace/apps/<app>/<version>` |
-| Menu entry | Start menu › ArtCraft › *App* | Launchpad / Spotlight | `.desktop` file with the app's icons and MIME types |
-| Command line | | | `~/.local/bin/<app>` and `<app>-cli` |
-| Uninstall entry | Settings › Apps | | |
-| "Open with" | registered per user for the app's file types | from the app | from the app's MIME types |
-
-On Fedora and Debian-based systems, Settings › **Install apps as system packages** installs each
-app's `.rpm` through dnf (or zypper) or its `.deb` through apt instead, asking for your password
-through the desktop's prompt (pkexec). The package manager then owns the files, and OktoSpace
-still finds updates and installs the new package; verify uses `rpm -V` / `dpkg --verify`.
-
-Setup programs and MSIs (ArtCraft ships one) run silently; OktoSpace then finds the program and
-its uninstaller through the Settings › Apps entry the installer created. On Windows the
-`portable.txt` marker is removed so app preferences live in `%APPDATA%` and survive updates.
+OktoSpace updates itself; installed from an `.rpm` or `.deb`, it leaves that to the package manager.
 
 ## Command line
 
 ```text
 oktospace-cli list                       # every app, installed version, latest version
-oktospace-cli install photocraft gridcraft
-oktospace-cli install photocraft --version 0.3.0
-oktospace-cli install --all
+oktospace-cli info zed
+oktospace-cli install zed localsend
+oktospace-cli install zed --version 0.200.0
+oktospace-cli build llama-cpp            # build from source and install
+oktospace-cli build owner/repo           # any GitHub repository
 oktospace-cli update                     # update everything (or name apps)
 oktospace-cli check                      # exit code 10 when updates are available
-oktospace-cli rollback photocraft
-oktospace-cli verify photocraft          # exit code 11 when files are damaged
-oktospace-cli repair photocraft
-oktospace-cli channel photocraft pin     # stay on the installed version (or stable / prerelease / default)
-oktospace-cli launch photocraft ~/Pictures/poster.psd
-oktospace-cli uninstall photocraft
-oktospace-cli fonts list | install [family] | uninstall [family]
+oktospace-cli rollback zed
+oktospace-cli verify zed | repair zed
+oktospace-cli channel zed pin            # stay on this version (or stable / prerelease / default)
+oktospace-cli launch zed
+oktospace-cli uninstall zed
+oktospace-cli source add owner/repo [--binary name] | list | check owner/repo | remove ID
+oktospace-cli source set zed someone/zed-fork   # update an app from a fork (`official` to go back)
 oktospace-cli export apps.json && oktospace-cli import apps.json [--exact]
-oktospace-cli news                       # news and tutorials from getartcraft.com
-oktospace-cli report-bug photocraft
+oktospace-cli detect                     # find apps installed without OktoSpace and adopt them
+oktospace-cli report-bug zed
 oktospace-cli autostart on|off
 oktospace-cli config [key] [value]       # e.g. config download_limit_kbps 2048
 oktospace-cli self-update | self-install | paths | cleanup
-oktospace-cli detect                     # find apps installed without OktoSpace and adopt them
-oktospace-cli open-file poster.psd       # open a file in the app that handles it
-oktospace-cli file-types list | on [ext…] | off [ext…]
-oktospace-cli source list | enable | disable | check owner/repo | add owner/repo [--binary name]
-oktospace-cli source set photocraft someone/photocraft-fork   # or `official` to go back
-oktospace-cli addons list [--app photocraft] [--checked] | info ID | install ID [--yes] | remove ID
-oktospace-cli addons repos [add owner/repo | remove ID | enable ID | disable ID] | check FILE
-oktospace-cli profile export photocraft [--parts layouts,shortcuts] [--out FILE]
-oktospace-cli profile import FILE [--parts …] | show FILE | parts APP | backups APP
 ```
 
 For IT and classrooms:
@@ -211,13 +130,25 @@ oktospace-cli policy show [--json] | check policy.json | refresh
 oktospace-cli update --scheduled         # for a scheduled task: only inside the update window
 oktospace-cli report [--json] [--out FILE] [--to-share]
 oktospace-cli cache fill [apps…] [--dir DIR] [--all-platforms] | status
-oktospace-cli reset photocraft | --all [--yes]   # fresh app settings between classes (kept as a backup)
 ```
 
 `--quiet` prints nothing but errors and runs installers without any windows. `--refresh` skips
 the 10-minute release cache. `-v` shows what is happening. Set `GITHUB_TOKEN` (or add a token in
 Settings) to raise GitHub's rate limit. `OKTOSPACE_HOME` puts all of OktoSpace's state under
 one folder.
+
+## Where apps go
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| Apps | `%LOCALAPPDATA%\OktoSpace\Apps\<app>\<version>` | current version in `~/Applications`, older ones in `~/Library/Application Support/OktoSpace` | `~/.local/share/oktospace/apps/<app>/<version>` |
+| Menu entry | Start menu › OktoSpace › *App* | Launchpad / Spotlight | `.desktop` file |
+| Command line | | | `~/.local/bin/<app>` |
+| Uninstall entry | Settings › Apps | | |
+
+On Fedora and Debian-based systems, Settings › **Install apps as system packages** installs an
+app's `.rpm` or `.deb` through the package manager instead, when its release has one. Setup
+programs and MSIs run silently; OktoSpace then finds the program and its uninstaller.
 
 ## Managing many computers
 
@@ -226,14 +157,14 @@ Deploy a `policy.json` to `%ProgramData%\OktoSpace\` (Windows),
 
 ```json
 {
-  "organization": "Riverside School Art Lab",
-  "support": "https://help.example.edu/art-lab",
+  "organization": "Riverside School Lab",
+  "support": "https://help.example.edu/lab",
   "settings": { "auto_install_updates": true, "include_prereleases": false },
   "lock_settings": false,
-  "required_apps": ["photocraft", "pdfcraft"],
-  "allowed_apps": ["photocraft", "pdfcraft", "gridcraft"],
+  "required_apps": ["zed", "localsend"],
+  "allowed_apps": ["zed", "localsend", "obs-studio"],
   "blocked_apps": [],
-  "pinned_versions": { "photocraft": "0.3.0" },
+  "pinned_versions": { "zed": "0.200.0" },
   "update_window": { "days": ["mon", "tue", "wed", "thu", "fri"], "from": "17:00", "to": "07:00" },
   "prevent_uninstall": true,
   "report_dir": "\\\\server\\oktospace\\reports",
@@ -244,30 +175,20 @@ Deploy a `policy.json` to `%ProgramData%\OktoSpace\` (Windows),
 ```
 
 - `settings` values are forced and shown as locked in the app; `lock_settings` locks all of them.
-- `required_apps` are installed on start (or with `oktospace-cli apply-policy` from a login
-  script); `allowed_apps` hides everything else and `blocked_apps` hides single apps.
-- `pinned_versions` keeps every computer on the same version (older or newer ones are replaced).
-- `update_window` limits automatic updates to those hours (past midnight works); manual updates
-  are always allowed, and `oktospace-cli update --scheduled` does nothing outside it.
-- `prevent_uninstall` hides Uninstall, Rollback and channel choices; only an administrator can
-  uninstall from the command line.
-- `report_dir` gets a `<computer name>.json` after each check: computer, OS, OktoSpace and every
-  app's version and update state. `oktospace-cli report` prints the same.
-- `policy_url` is fetched on each check and its values replace this file's (from the next start,
-  or right away with `apply-policy`), so a whole room changes from one place.
-- `organization` and `support` show as a "Managed by" badge in the app's top bar.
-- `profiles` hands every computer a workspace profile (the teacher's layouts, shortcuts and
-  presets, saved with `oktospace-cli profile export`): `"apply": "once"` when it's new or
-  changed, or `"every-start"` so each class starts the same.
-- `block_unchecked_addons` allows only add-ons checked by OktoSpace.
+- `required_apps` are installed on start (or with `oktospace-cli apply-policy`); `allowed_apps`
+  hides everything else and `blocked_apps` hides single apps.
+- `pinned_versions` keeps every computer on the same version.
+- `update_window` limits automatic updates to those hours; manual updates are always allowed.
+- `prevent_uninstall` hides Uninstall, Rollback and channel choices.
+- `report_dir` gets a `<computer name>.json` after each check with every app's version and state.
+- `policy_url` is fetched on each check and replaces this file's values, so a whole room changes
+  from one place.
 
-Classrooms can share a **package cache**: set a folder (Settings › IT & Classroom, or
-`oktospace-cli config package_cache '\\server\oktospace\packages'`), fill it once with
-`oktospace-cli cache fill`, and every computer installs from it after checking the published
-checksum. `package_cache_write` lets computers add what they download. An exported app list
-(`oktospace-cli export`) sets up a lab the same way: `oktospace-cli --quiet import apps.json --exact`.
+Computers can share a **package cache**: set a folder (Settings › IT & Classroom, or
+`oktospace-cli config package_cache '\\server\oktospace\packages'`), fill it with
+`oktospace-cli cache fill`, and every computer installs from it after checking the checksum.
 
-## Building
+## Building OktoSpace
 
 ```sh
 cargo run -p oktospace          # the app
@@ -275,68 +196,28 @@ cargo run -p oktospace-cli -- list
 cargo test --workspace
 ```
 
-The workspace has three crates:
-
-- `crates/oktospace-core`: catalog, GitHub release discovery, downloads (resume, speed limit,
-  zsync deltas), unpacking, desktop integration, fonts, policy and update logic. No UI.
-- `crates/oktospace`: the desktop app ([egui](https://github.com/emilk/egui), the same UI
-  toolkit the ArtCraft apps use).
+- `crates/oktospace-core`: the library, GitHub release discovery, downloads (resume, speed
+  limit, zsync deltas), building from source, unpacking, desktop integration, policy and updates.
+  No UI.
+- `crates/oktospace`: the desktop app ([egui](https://github.com/emilk/egui)).
 - `crates/oktospace-cli`: the command line.
 
-CI (`.github/workflows/ci.yml`, scripts in `ci/`) runs:
+CI runs the tests and clippy on Windows, macOS and Linux, real installs, updates, rollbacks and
+uninstalls on each, a real build from source on Linux, a GUI smoke test on each desktop, and an
+RPM build in a Fedora container. Pushing a `v*` tag (or running the Release workflow with a tag)
+builds and publishes Windows, macOS and Linux packages with a `SHA256SUMS.txt`.
 
-- the tests and clippy on Windows, macOS and Linux;
-- end-to-end installs of real ArtCraft releases on each: install, update, rollback, repair,
-  uninstall, policy, export/import, fonts, delta updates;
-- a GUI smoke test on each desktop: the window opens, the tray icon registers (on Linux with a
-  real panel that starts after OktoSpace), a test notification is accepted, and closing the
-  window keeps OktoSpace in the tray. Screenshots are uploaded with the run;
-- a Fedora container that builds the RPM the way Copr does, installs it with dnf, and installs
-  ArtCraft apps as RPMs with it.
+### The App library
 
-Pushing a `v*` tag builds Windows (x64, ARM64), macOS (universal `.dmg`) and Linux (x86_64,
-aarch64: `.tar.gz`, `.deb`, `.rpm`) packages and publishes them with a `SHA256SUMS.txt`
-(`.github/workflows/release.yml`). They use the ArtCraft naming scheme, which is how OktoSpace
-finds its own updates.
-
-### Fedora Copr
-
-[Copr](https://copr.fedorainfracloud.org) builds OktoSpace for every Fedora release and serves it
-as a dnf repository, so Fedora users get updates with the rest of their system. Setup, once:
-
-1. Sign in to Copr with a Fedora account and create a project named `oktospace` with the
-   Fedora releases (and architectures) to build for.
-2. From <https://copr.fedorainfracloud.org/api/>, add the repository secrets `COPR_LOGIN`,
-   `COPR_USERNAME` and `COPR_TOKEN`.
-
-From then on, publishing a release submits a Copr build (`.github/workflows/copr.yml`). Copr
-runs `make -f .copr/Makefile srpm`, which vendors the crates, and builds
-`packaging/fedora/oktospace.spec` offline. The same build runs in CI, so it's tested on every
-push.
-
-Getting into Fedora's own repositories goes through Fedora's package review: a packager
-account and sponsor, and following the Rust packaging guidelines (each crate dependency packaged
-as `rust-*`, no vendoring). The spec is a starting point for that.
-
-### winget
-
-After a release, run [`winget.yml`](.github/workflows/winget.yml) by hand (Actions › winget › Run workflow, with the release's tag): it writes the manifests
-(`packaging/winget/manifests.py`), checks them against winget's schemas, installs, finds and
-uninstalls OktoSpace with winget on Windows, and opens the pull request on
-[microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs). Opening the pull request
-needs a `WINGET_TOKEN` repository secret: a classic token with the `public_repo` scope. Without
-it, the manifests are only built, tested and kept as the run's `winget-manifests` artifact.
-
-The ArtCraft apps themselves aren't in winget; OktoSpace updates them (`oktospace-cli update`).
-
-### Adding an app
-
-Add an entry to `catalog.json` with the GitHub repository, an icon URL, a two-letter fallback
-badge, colors and the file extensions it opens, and bump `revision`. As long as the app's
-releases follow the naming scheme above, nothing else is needed.
+`catalog.json` is the library. Most of it is rebuilt by the **App library** workflow
+(`tools/library.py`), which reads curated lists of open-source apps and keeps the ones that have
+something to install or can be built: each app's repository, stars, licence, the platforms its
+latest release publishes for, and its build system. Entries marked `"curated": true` are picked
+by hand and kept when the library is rebuilt. To add an app by hand, add a curated entry with
+its repository, name, two-letter badge, colors and category, and bump `revision`.
 
 ## License
 
-MIT or Apache-2.0, at your option. OktoSpace is a community project. Done for Education purposes only. It isn't affiliated with
-the ArtCraft developers, Adobe or Microsoft. App names and icons belong to their owners;
-OktoSpace downloads the icons from the apps' own repositories instead of bundling them.
+MIT or Apache-2.0, at your option. OktoSpace isn't affiliated with GitHub or with the apps'
+developers. App names and icons belong to their owners; OktoSpace downloads icons from GitHub
+instead of bundling them.

@@ -474,7 +474,7 @@ impl Manager {
     }
 
     /// Fetch releases for every app in parallel. Returns the apps that failed.
-    /// The apps a refresh checks: installed, curated and added ones (every app in a small
+    /// The apps a refresh checks: installed, featured and added ones (every app in a small
     /// library). The rest of a big library is checked when someone opens it ([`Self::refresh`]),
     /// so a refresh stays within GitHub's limits.
     pub fn checked_apps(&self) -> Vec<String> {
@@ -484,7 +484,7 @@ impl Manager {
         catalog
             .apps
             .into_iter()
-            .filter(|a| small || a.curated || a.custom || a.featured || installed.contains(&a.id))
+            .filter(|a| small || a.custom || a.featured || installed.contains(&a.id))
             .map(|a| a.id)
             .collect()
     }

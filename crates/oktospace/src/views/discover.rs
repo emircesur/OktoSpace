@@ -1,4 +1,4 @@
-//! The Discover tab: a featured app, what's new across all apps, apps to try, and links.
+//! The Discover tab: a featured app, what's new among popular apps, and apps to try.
 
 use eframe::egui::{self, Align, Color32, CornerRadius, Layout, Margin, RichText, Sense, Ui, Vec2};
 use oktospace_core::AppState;
@@ -70,7 +70,7 @@ fn hero(app: &mut OktoSpaceApp, ui: &mut Ui) {
     text_rect.max.x = (art.left() - 40.0).max(text_rect.min.x + 200.0);
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(text_rect).layout(Layout::top_down(Align::Min)));
     let p = app.palette;
-    child.label(RichText::new(format!("Make it in {}", s.app.name)).size(28.0).strong().color(Color32::WHITE));
+    child.label(RichText::new(&s.app.name).size(28.0).strong().color(Color32::WHITE));
     child.add_space(2.0);
     child.label(RichText::new(&s.app.description).size(14.0).color(Color32::from_white_alpha(220)));
     if let Some(r) = &s.latest {

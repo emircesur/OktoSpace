@@ -224,11 +224,26 @@ def main():
                 app[key] = d[key]
         apps.append(app)
 
+    # Curated apps' stars too, so the whole library sorts by popularity.
+    with cf.ThreadPoolExecutor(8) as ex:
+        for app, info in zip(curated, ex.map(lambda a: api(f"repos/{a['repo']}"), curated)):
+            if info:
+                app["stars"] = info.get("stargazers_count", 0)
+    everything = sorted(curated + apps, key=lambda a: -a.get("stars", 0))
+    # The most popular apps with something to download are featured: Discover shows them, and a
+    # refresh checks them along with the installed ones.
+    featured = {a["id"] for a in [x for x in everything if x.get("platforms") and not x.get("curated")][:12]}
+    for app in everything:
+        if app["id"] in featured:
+            app["featured"] = True
+        else:
+            app.pop("featured", None)
+
     categories = [c for c in catalog.get("categories", []) if any(a["category"] == c["id"] for a in curated)]
     for cid, name in sections:
         if cid not in [c["id"] for c in categories]:
             categories.append({"id": cid, "name": name})
-    catalog["apps"] = curated + apps
+    catalog["apps"] = everything
     catalog["categories"] = categories
     catalog["revision"] = int(catalog.get("revision", 0)) + 1
     with open(args.catalog, "w") as f:
