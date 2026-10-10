@@ -87,14 +87,18 @@ it from source**, and keeps it up to date. Written in Rust, for Windows, macOS a
 - A big library is checked sensibly: installed apps on every check, the rest when you open them,
   so GitHub's rate limits aren't a problem (add a token in Settings for more).
 
+**Settings** are split into pages down a side menu (General, Downloads, Installation,
+Appearance, Apps from GitHub, Storage, Build tools, GitHub account, Export & import, IT &
+Classroom, About), each a short list of switches with a line on what they do.
+
 **For IT and classrooms**: a machine-wide policy file, a quiet command line, `install --all`,
 app-list export/import and a shared package cache (see [below](#managing-many-computers)).
 
 | App page | Build from source |
 |---|---|
 | ![App page](docs/screenshots/app-details.png) | ![Build from source](docs/screenshots/build.png) |
-| **Discover** | |
-| ![Discover](docs/screenshots/discover.png) | |
+| **Discover** | **Settings** |
+| ![Discover](docs/screenshots/discover.png) | ![Settings](docs/screenshots/settings.png) |
 
 ## Install OktoSpace
 

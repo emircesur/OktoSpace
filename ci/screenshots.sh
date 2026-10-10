@@ -29,4 +29,5 @@ shot apps "" 15
 shot discover discover 15
 shot app-details app:zed 20
 shot build app:llama-cpp:build 15
+shot settings settings 10
 ls -la "$OUT"

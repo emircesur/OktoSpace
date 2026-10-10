@@ -3167,7 +3167,7 @@ dependencies = [
 
 [[package]]
 name = "oktospace"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "eframe",
@@ -3192,7 +3192,7 @@ dependencies = [
 
 [[package]]
 name = "oktospace-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3207,7 +3207,7 @@ dependencies = [
 
 [[package]]
 name = "oktospace-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "directories",

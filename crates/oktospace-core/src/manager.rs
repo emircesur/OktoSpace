@@ -2647,7 +2647,11 @@ mod tests {
 
         // A newer release is offered until it's skipped, and again once a newer one is out.
         let token = m.platform().token().unwrap();
-        let ext = if m.platform().os == Os::Windows { "-portable.zip" } else { ".tar.gz" };
+        let ext = match m.platform().os {
+            Os::Windows => "-portable.zip",
+            Os::Macos => ".dmg",
+            _ => ".tar.gz",
+        };
         let release = |v: &str| Release {
             tag: format!("v{v}"),
             name: format!("v{v}"),

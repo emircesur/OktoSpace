@@ -203,6 +203,8 @@ pub struct OktoSpaceApp {
     /// Settings › Storage and Build tools, measured when Settings opens.
     pub storage: Option<oktospace_core::manager::Storage>,
     pub toolchains: Option<Vec<(oktospace_core::build::Tool, Option<PathBuf>)>>,
+    /// The Settings page shown.
+    pub settings_page: views::settings::Page,
     pub verify_results: HashMap<String, VerifyReport>,
     pub tours: HashMap<String, Result<oktospace_core::tour::Tour, String>>,
     tour_loading: HashSet<String>,
@@ -290,6 +292,7 @@ impl OktoSpaceApp {
             palette_open: None,
             storage: None,
             toolchains: None,
+            settings_page: Default::default(),
             verify_results: HashMap::new(),
             tours: HashMap::new(),
             tour_loading: HashSet::new(),
