@@ -191,6 +191,11 @@ pub fn self_entry() -> crate::catalog::AppEntry {
         config_dir: None,
         metainfo: None,
         custom: false,
+        stars: None,
+        license: None,
+        build: None,
+        platforms: Vec::new(),
+        curated: false,
     }
 }
 

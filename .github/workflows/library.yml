@@ -1,0 +1,49 @@
+# Rebuilds the App library (catalog.json) from curated lists of open-source apps: run it by hand
+# with the lists' addresses (raw Markdown files or GitHub repositories, separated by spaces).
+# Apps marked "curated" in catalog.json are kept; the rest is rebuilt and committed to main.
+name: App library
+
+on:
+  workflow_dispatch:
+    inputs:
+      lists:
+        description: Lists to build the library from (URLs separated by spaces)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build catalog.json
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          LISTS: ${{ inputs.lists }}
+        run: python3 tools/library.py $LISTS --catalog catalog.json
+      - name: Check it parses
+        run: |
+          python3 - <<'PY'
+          import json
+          d = json.load(open("catalog.json"))
+          cats = {c["id"] for c in d["categories"]}
+          ids = [a["id"] for a in d["apps"]]
+          assert len(ids) == len(set(ids)), "duplicate ids"
+          for a in d["apps"]:
+              assert a["category"] in cats, a["id"]
+              assert len(a["code"]) == 2, a["id"]
+          print(len(ids), "apps in", len(cats), "categories")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: catalog
+          path: catalog.json
+      - name: Commit
+        run: |
+          if git diff --quiet catalog.json; then echo "No changes"; exit 0; fi
+          git config user.name emircesur
+          git config user.email 94137333+emircesur@users.noreply.github.com
+          git commit -m "App library: rebuilt from the lists" catalog.json
+          git push origin HEAD:main

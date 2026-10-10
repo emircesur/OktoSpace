@@ -83,6 +83,11 @@ pub fn custom_entry(app: &CustomApp) -> AppEntry {
         config_dir: None,
         metainfo: None,
         custom: true,
+        stars: None,
+        license: None,
+        build: None,
+        platforms: Vec::new(),
+        curated: false,
     }
 }
 

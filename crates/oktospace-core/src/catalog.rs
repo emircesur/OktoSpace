@@ -66,6 +66,23 @@ pub struct AppEntry {
     /// Added by the user from a GitHub repository (not part of the App library).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub custom: bool,
+    /// GitHub stars when the library was built (for sorting and display).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stars: Option<u64>,
+    /// The repository's licence (SPDX id).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+    /// How it builds from source (`cargo`, `go`, `cmake`, `meson`, `make`, `npm`, `zig`,
+    /// `swift`, `dotnet`), when the library found a build system in the repository.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build: Option<String>,
+    /// Platforms its latest release had downloads for when the library was built
+    /// (`windows`, `macos`, `linux`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub platforms: Vec<String>,
+    /// Picked by hand: kept when the library is rebuilt from the lists.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub curated: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
