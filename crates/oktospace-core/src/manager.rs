@@ -481,10 +481,11 @@ impl Manager {
         let catalog = self.catalog();
         let installed = self.inner.installed.lock().unwrap().apps.keys().cloned().collect::<HashSet<_>>();
         let small = catalog.apps.len() <= 60;
+        let favorites = self.settings().favorites;
         catalog
             .apps
             .into_iter()
-            .filter(|a| small || a.custom || a.featured || installed.contains(&a.id))
+            .filter(|a| small || a.custom || a.featured || installed.contains(&a.id) || favorites.contains(&a.id))
             .map(|a| a.id)
             .collect()
     }
@@ -1000,6 +1001,15 @@ impl Manager {
     /// How `id` builds from source, once its source is downloaded: see [`Manager::build`].
     /// The release to build: `version`, or the latest (the default branch when there's none).
     fn build_source(&self, app: &AppEntry, version: Option<&Version>) -> anyhow::Result<(String, Version)> {
+        // A branch, tag or commit chosen in the app's build options.
+        let chosen = self.settings().builds.get(&app.id).and_then(|b| b.git_ref.clone());
+        if let Some(git_ref) = chosen.map(|r| r.trim().to_string()).filter(|r| !r.is_empty()) {
+            let version = crate::version::parse_tag(&git_ref).unwrap_or_else(|| {
+                let day = github::now_secs() / 86_400;
+                Version::parse(&format!("0.0.0-source.{day}")).expect("valid")
+            });
+            return Ok((git_ref, version));
+        }
         let releases = match self.releases(&app.id) {
             Some(list) => Some(list),
             None => self.refresh(&app.id, false).ok(),
@@ -1052,9 +1062,16 @@ impl Manager {
         archive::unpack(&tarball, &src, progress)?;
         let _ = std::fs::remove_file(&tarball);
 
-        let recipe = crate::build::detect(&src, os).ok_or_else(|| {
-            anyhow::anyhow!("OktoSpace doesn't know how to build {} (no build system it recognises)", app.name)
-        })?;
+        let options = self.settings().builds.get(&app.id).cloned().unwrap_or_default();
+        let recipe = match options.commands.as_deref().filter(|c| !c.trim().is_empty()) {
+            Some(commands) => crate::build::custom(commands, options.output.as_deref()),
+            None => crate::build::detect(&src, os).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "OktoSpace doesn't know how to build {} (no build system it recognises); give it the commands in the app's Build tab",
+                    app.name
+                )
+            })?,
+        };
         let missing = crate::build::missing_tools(&recipe);
         if !missing.is_empty() {
             let list: Vec<String> = missing.iter().map(|t| format!("{} ({})", t.name, t.url)).collect();
@@ -1094,6 +1111,63 @@ impl Manager {
         let installed = self.install(&plan, progress)?;
         let _ = std::fs::remove_dir_all(&src);
         Ok(installed)
+    }
+
+    /// Update an app: built from source, it's built again; otherwise the new release is installed.
+    pub fn update_app(
+        &self,
+        id: &str,
+        log: &(dyn Fn(String) + Sync),
+        progress: &Progress,
+    ) -> anyhow::Result<InstalledApp> {
+        if self.installed_app(id).is_some_and(|i| i.current.built_from_source()) {
+            return self.build(id, None, log, progress);
+        }
+        let plan = self.plan(id, None)?;
+        self.install(&plan, progress)
+    }
+
+    /// The releases newer than the installed version, up to the latest (newest first): what
+    /// changed since then.
+    pub fn releases_since(&self, id: &str) -> Vec<Release> {
+        let Some(installed) = self.installed_app(id) else { return Vec::new() };
+        let Some(list) = self.releases(id) else { return Vec::new() };
+        let pre = self.settings().wants_prereleases(id);
+        let mut newer: Vec<Release> = list
+            .releases
+            .into_iter()
+            .filter(|r| (pre || !r.prerelease) && r.version.as_ref().is_some_and(|v| *v > installed.current.version))
+            .collect();
+        newer.sort_by(|a, b| b.version.cmp(&a.version));
+        newer
+    }
+
+    pub fn is_favorite(&self, id: &str) -> bool {
+        self.settings().favorites.iter().any(|f| f == id)
+    }
+
+    /// Mark or unmark an app as a favorite. Returns whether it is one now.
+    pub fn toggle_favorite(&self, id: &str) -> anyhow::Result<bool> {
+        let mut settings = self.inner.settings.read().unwrap().clone();
+        let now = if let Some(i) = settings.favorites.iter().position(|f| f == id) {
+            settings.favorites.remove(i);
+            false
+        } else {
+            settings.favorites.push(id.to_string());
+            true
+        };
+        self.set_settings(settings)?;
+        Ok(now)
+    }
+
+    /// Search GitHub for repositories.
+    pub fn search_github(&self, query: &str) -> anyhow::Result<Vec<github::RepoHit>> {
+        self.github().search_repos(query)
+    }
+
+    /// The repositories a GitHub user starred.
+    pub fn starred(&self, user: &str) -> anyhow::Result<Vec<github::RepoHit>> {
+        self.github().starred(user)
     }
 
     /// Build the new AppImage from the installed one plus the changed blocks, when the release
@@ -1684,6 +1758,12 @@ impl Manager {
                 let _ = if path.is_dir() { std::fs::remove_dir_all(&path) } else { std::fs::remove_file(&path) };
             }
         }
+        // Sources and build trees left by builds.
+        let builds = self.inner.paths.cache.join("builds");
+        if builds.exists() {
+            freed += dir_size(&builds);
+            let _ = std::fs::remove_dir_all(&builds);
+        }
         self.with_db(|db| db.retry_pending_removal())?;
         Ok(freed)
     }
@@ -2197,6 +2277,49 @@ mod tests {
         // The cached file doesn't match, so it is re-downloaded from an unreachable URL.
         assert!(no_progress(|p| m.install(&plan, p)).is_err());
         assert_eq!(m.installed_app("photocraft").unwrap().current.version, Version::new(0, 5, 0));
+    }
+
+    #[test]
+    fn favorites_and_what_changed_since_the_installed_version() {
+        let tmp = tempfile::tempdir().unwrap();
+        let m = manager(tmp.path());
+        assert!(!m.is_favorite("gridcraft"));
+        assert!(m.toggle_favorite("gridcraft").unwrap());
+        assert!(m.is_favorite("gridcraft"));
+        // Favorites are checked on refresh even in a big library.
+        assert!(m.checked_apps().contains(&"gridcraft".to_string()));
+        assert!(!m.toggle_favorite("gridcraft").unwrap());
+        assert!(!m.is_favorite("gridcraft"));
+
+        no_progress(|p| m.install(&local_plan(&m, "0.4.0"), p)).unwrap();
+        let release = |v: &str, pre: bool| Release {
+            tag: format!("v{v}"),
+            name: format!("v{v}"),
+            version: Some(Version::parse(v).unwrap()),
+            prerelease: pre,
+            published_at: None,
+            body: format!("notes for {v}"),
+            html_url: String::new(),
+            assets: Vec::new(),
+        };
+        m.inner.releases.write().unwrap().insert(
+            "photocraft".into(),
+            ReleaseList {
+                repo: "storytold/photocraft".into(),
+                releases: vec![
+                    release("0.3.0", false),
+                    release("0.6.0", false),
+                    release("0.7.0-rc.1", true),
+                    release("0.5.0", false),
+                ],
+                source: github::Source::Api,
+                fetched_at: 0,
+                etag: None,
+            },
+        );
+        let tags: Vec<String> = m.releases_since("photocraft").into_iter().map(|r| r.tag).collect();
+        assert_eq!(tags, ["v0.6.0", "v0.5.0"]);
+        assert!(m.releases_since("gridcraft").is_empty());
     }
 
     #[test]

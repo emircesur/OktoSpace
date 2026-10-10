@@ -13,11 +13,17 @@ it from source**, and keeps it up to date. Written in Rust, for Windows, macOS a
 **App library**
 - Over 300 open-source apps by category (AI, developer tools, productivity, creative,
   infrastructure, games and more), sorted by popularity, with their stars, licence and the
-  platforms they publish for. Search by name, description or repository.
-- **Add any GitHub repository** (`owner/repo`): it joins the library and is installed and updated
-  the same way.
-- Every app page has an Overview with the screenshots from its README, every version (install or
-  switch to any of them), release notes, the README itself, and a **Build** tab.
+  platforms they publish for. Search by name, description or repository; filter to the apps
+  that run **on this computer** or **build from source**, and sort by popularity, name or newest
+  release.
+- **Find on GitHub**: search every repository on GitHub (most starred first), or list someone's
+  starred repositories, and add any of them in one click. Or type `owner/repo` yourself.
+- **Favorites**: heart an app to keep it in Favorites and hear about its new releases, even
+  before you install it.
+- Every app page has an Overview (stars, licence, the platforms it publishes for, how it builds,
+  its website, and the screenshots from its README), **what's changed since your version** with
+  the release notes in between, every version (install or switch to any of them), the README
+  itself, and a **Build** tab.
 
 **Install from releases**
 - OktoSpace picks the right download for your computer from a release's files: portable zips,
@@ -33,7 +39,12 @@ it from source**, and keeps it up to date. Written in Rust, for Windows, macOS a
   OktoSpace downloads the source of the latest release (or of the default branch when there's no
   release), recognises its build system, checks that the tools it needs are installed, and builds
   it with the output streamed live.
-- The program it builds is installed like a download: menu entry, updates, rollback, uninstall.
+- The program it builds is installed like a download: menu entry, rollback, uninstall, and
+  **updates that rebuild it** from the new release's source.
+- **Build options per app**: build a branch, tag or commit instead of the release, run your own
+  build commands (one per line) when the recipe below doesn't fit, and point at the program
+  they produce.
+- Downloads and build folders can be cleared from Settings (or `oktospace-cli cleanup`).
 
 | Found in the source | Builds with | Needs |
 |---|---|---|
@@ -99,7 +110,10 @@ OktoSpace updates itself; installed from an `.rpm` or `.deb`, it leaves that to 
 ## Command line
 
 ```text
-oktospace-cli list                       # every app, installed version, latest version
+oktospace-cli list [--installed] [--json] # every app, installed version, latest version
+oktospace-cli search markdown editor     # search GitHub, most starred first
+oktospace-cli favorites [add|remove zed] # list or change favorites
+oktospace-cli import-stars someone [--dry-run]  # add the apps among someone's GitHub stars
 oktospace-cli info zed
 oktospace-cli install zed localsend
 oktospace-cli install zed --version 0.200.0

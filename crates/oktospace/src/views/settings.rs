@@ -241,7 +241,7 @@ pub fn window(app: &mut OktoSpaceApp, ctx: &egui::Context) {
                 if ui.button("Open data folder").clicked() {
                     app.actions.push(Action::OpenPath(app.manager.paths().root.clone()));
                 }
-                if ui.button("Clear downloads").clicked() {
+                if ui.button("Clear downloads and build files").on_hover_text("Leftover downloads, and the sources and build trees of apps built from source").clicked() {
                     app.actions.push(Action::Cleanup);
                 }
                 if ui.button("Source code ↗").clicked() {

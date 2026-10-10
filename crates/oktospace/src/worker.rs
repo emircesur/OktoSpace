@@ -99,6 +99,8 @@ pub enum Msg {
         key: String,
         line: String,
     },
+    GithubResults(Result<Vec<oktospace_core::github::RepoHit>, String>),
+    RepoAdded(Result<String, String>),
     Verified(String, Result<VerifyReport, String>),
     Tour(String, Result<oktospace_core::tour::Tour, String>),
     Shot(String, Result<egui::ColorImage, String>),
@@ -166,10 +168,13 @@ pub fn start(bus: &Bus, manager: &Manager, key: &str, job: &Job) {
                     manager.install(&plan, &progress)
                 })
                 .map(|r| format!("{name} {} is installed{}", r.current.version, saved(&r))),
-            JobKind::Update => manager
-                .plan(&key, None)
-                .and_then(|plan| manager.install(&plan, &progress))
-                .map(|r| format!("{name} was updated to {}{}", r.current.version, saved(&r))),
+            JobKind::Update => {
+                // Built from source: built again (its log shows on the Build tab).
+                let log = |line: String| bus.send(Msg::BuildLog { key: key.clone(), line });
+                manager
+                    .update_app(&key, &log, &progress)
+                    .map(|r| format!("{name} was updated to {}{}", r.current.version, saved(&r)))
+            }
             JobKind::Repair => {
                 manager.repair(&key, &progress).map(|r| format!("{name} {} was repaired", r.current.version))
             }
@@ -223,6 +228,27 @@ pub fn refresh(bus: &Bus, manager: &Manager, force: bool, manual: bool) {
         if let Ok(found) = selfupdate::check(&manager) {
             bus.send(Msg::SelfUpdateFound(found.map(Box::new)));
         }
+    });
+}
+
+/// Search GitHub, or (`stars`) list what a user starred.
+pub fn search_github(bus: &Bus, manager: &Manager, query: String, stars: bool) {
+    let manager = manager.clone();
+    bus.spawn("github-search", move |bus| {
+        let result = if stars { manager.starred(query.trim()) } else { manager.search_github(&query) };
+        bus.send(Msg::GithubResults(result.map_err(|e| format!("{e:#}"))));
+    });
+}
+
+/// Add a repository's app (installed from its releases, or built when it has none).
+pub fn add_repo(bus: &Bus, manager: &Manager, repo: String) {
+    let manager = manager.clone();
+    bus.spawn("add-repo", move |bus| {
+        let result = manager.add_source_app_to_build(&repo).map(|app| {
+            let _ = manager.refresh(&app.id, false);
+            app.id
+        });
+        bus.send(Msg::RepoAdded(result.map_err(|e| format!("{e:#}"))));
     });
 }
 

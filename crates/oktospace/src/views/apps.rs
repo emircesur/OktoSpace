@@ -19,6 +19,16 @@ pub fn sidebar(app: &mut OktoSpaceApp, ui: &mut Ui) {
     nav(app, ui, "App library", AppsView::All, Some(app.states.len()), false);
     nav(app, ui, "Updates", AppsView::Updates, (updates > 0).then_some(updates), true);
     nav(app, ui, "Installed", AppsView::Installed, Some(installed), false);
+    let favorites = app.settings.favorites.len();
+    nav(app, ui, "Favorites", AppsView::Favorites, (favorites > 0).then_some(favorites), false);
+    ui.add_space(4.0);
+    if ui
+        .add(egui::Button::new(RichText::new("+  Find on GitHub…").color(p.accent)).frame(false))
+        .on_hover_text("Search GitHub, or add the apps someone starred")
+        .clicked()
+    {
+        app.actions.push(Action::OpenGithub);
+    }
 
     theme::section_label(ui, &p, "Categories");
     let catalog = app.manager.catalog();
@@ -117,12 +127,16 @@ pub fn content(app: &mut OktoSpaceApp, ui: &mut Ui) {
     let catalog = app.manager.catalog();
     let title = match &app.apps_view {
         AppsView::Installed => "Installed".to_string(),
+        AppsView::Favorites => "Favorites".to_string(),
         AppsView::Category(c) => catalog.category_name(c),
         _ => "App library".into(),
     };
     ui.horizontal(|ui| {
         ui.heading(title);
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            if theme::pill(ui, &p, "Find on GitHub…").clicked() {
+                app.actions.push(Action::OpenGithub);
+            }
             let installable = app.states.iter().filter(|s| s.installed.is_none() && s.installable.is_some()).count();
             if installable > 1 && theme::pill(ui, &p, "Install several…").clicked() {
                 app.actions.push(Action::OpenMultiInstall);
@@ -137,18 +151,69 @@ pub fn content(app: &mut OktoSpaceApp, ui: &mut Ui) {
     self_install_banner(app, ui);
     offline_banner(app, ui);
 
+    // Sort and filter.
+    ui.horizontal(|ui| {
+        use crate::app::{LibraryFilter, LibrarySort};
+        for (f, label) in [
+            (LibraryFilter::All, "All"),
+            (LibraryFilter::ForThisComputer, "For this computer"),
+            (LibraryFilter::BuildsFromSource, "Builds from source"),
+        ] {
+            if ui.selectable_label(app.library_filter == f, label).clicked() {
+                app.library_filter = f;
+            }
+        }
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            egui::ComboBox::from_id_salt("library-sort")
+                .selected_text(match app.library_sort {
+                    LibrarySort::Popular => "Most popular",
+                    LibrarySort::Name => "Name",
+                    LibrarySort::Recent => "Newest release",
+                })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut app.library_sort, LibrarySort::Popular, "Most popular");
+                    ui.selectable_value(&mut app.library_sort, LibrarySort::Name, "Name");
+                    ui.selectable_value(&mut app.library_sort, LibrarySort::Recent, "Newest release");
+                });
+            ui.label(RichText::new("Sort").color(p.weak));
+        });
+    });
+    ui.add_space(6.0);
+
     let q = app.search.trim().to_string();
-    let states: Vec<AppState> = app
+    let platform = app.manager.platform();
+    let os = match platform.os {
+        oktospace_core::platform::Os::Windows => "windows",
+        oktospace_core::platform::Os::Macos => "macos",
+        _ => "linux",
+    };
+    let favorites = app.settings.favorites.clone();
+    let mut states: Vec<AppState> = app
         .states
         .iter()
         .filter(|s| match &app.apps_view {
             AppsView::Installed => s.installed.is_some(),
+            AppsView::Favorites => favorites.contains(&s.app.id),
             AppsView::Category(c) => &s.app.category == c,
             _ => true,
+        })
+        .filter(|s| match app.library_filter {
+            crate::app::LibraryFilter::All => true,
+            crate::app::LibraryFilter::ForThisComputer => {
+                s.installable.is_some() || (!s.known && s.app.platforms.iter().any(|p| p == os))
+            }
+            crate::app::LibraryFilter::BuildsFromSource => s.app.build.is_some(),
         })
         .filter(|s| matches_search(s, &q))
         .cloned()
         .collect();
+    match app.library_sort {
+        crate::app::LibrarySort::Popular => states.sort_by_key(|s| std::cmp::Reverse(s.app.stars.unwrap_or(0))),
+        crate::app::LibrarySort::Name => states.sort_by_key(|s| s.app.name.to_lowercase()),
+        crate::app::LibrarySort::Recent => {
+            states.sort_by_key(|s| std::cmp::Reverse(s.latest.as_ref().and_then(|r| r.published_at.clone())))
+        }
+    }
 
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         if states.is_empty() {
@@ -391,6 +456,20 @@ fn library_info(app: &oktospace_core::AppEntry) -> String {
     }
 }
 
+/// `["windows", "linux"]` → "Windows, Linux".
+fn platform_names(platforms: &[String]) -> String {
+    platforms
+        .iter()
+        .map(|p| match p.as_str() {
+            "windows" => "Windows",
+            "macos" => "macOS",
+            "linux" => "Linux",
+            other => other,
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 /// 1234 → "1.2k", 1234567 → "1.2M".
 pub fn short_count(n: u64) -> String {
     match n {
@@ -407,7 +486,16 @@ fn action_row(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
     ui.horizontal(|ui| {
         let info = match (&s.installed, s.latest_version()) {
             (Some(i), Some(l)) if s.update_available => format!("{} › {}", i.current.version, l),
-            (Some(i), _) => format!("Version {}", i.current.version),
+            (Some(i), _) => {
+                let mut text = format!("Version {}", i.current.version);
+                if let Some(size) = i.current.size_bytes {
+                    text.push_str(&format!(" · {}", format_bytes(size)));
+                }
+                if i.current.built_from_source() {
+                    text.push_str(" · built");
+                }
+                text
+            }
             (None, Some(l)) => match &s.installable {
                 Some((asset, _)) => match asset.size {
                     Some(size) => format!("{l} · {}", format_bytes(size)),
@@ -420,13 +508,33 @@ fn action_row(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
             (None, None) if s.app.build.is_some() => "No release yet · builds from source".into(),
             (None, None) => "No release yet".into(),
         };
-        ui.label(RichText::new(info).size(12.5).color(p.weak));
+        // Buttons first, from the right; the info line gets what's left and is cut short with
+        // "…" instead of running under them.
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             main_button(app, ui, s);
             more_menu(app, ui, s);
+            favorite_button(app, ui, &s.app.id);
+            ui.add_space(4.0);
+            ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                ui.add(egui::Label::new(RichText::new(&info).size(12.5).color(p.weak)).truncate()).on_hover_text(&info);
+            });
         });
     });
     let _ = id;
+}
+
+/// The heart that marks an app as a favorite.
+pub fn favorite_button(app: &mut OktoSpaceApp, ui: &mut Ui, id: &str) {
+    let on = app.settings.favorites.iter().any(|f| f == id);
+    let p = app.palette;
+    let heart = RichText::new(if on { "♥" } else { "♡" }).size(17.0).color(if on { p.bad } else { p.weak });
+    if ui
+        .add(egui::Button::new(heart).frame(false))
+        .on_hover_text(if on { "Remove from favorites" } else { "Add to favorites: hear about its new releases" })
+        .clicked()
+    {
+        app.actions.push(Action::ToggleFavorite(id.to_string()));
+    }
 }
 
 pub fn main_button(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
@@ -439,7 +547,7 @@ pub fn main_button(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
             app.actions.push(Action::Update(id));
         }
     } else if s.installed.is_some() {
-        if theme::pill(ui, &p, "Open").clicked() {
+        if theme::secondary(ui, &p, "Open").clicked() {
             app.actions.push(Action::Launch(id, vec![]));
         }
     } else if s.installable.is_some() {
@@ -454,10 +562,10 @@ pub fn main_button(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
     } else if !s.known {
         // Not looked at yet, or nothing to download for this computer: its page has the
         // releases and building from source.
-        if theme::pill(ui, &p, "Details").clicked() {
+        if theme::primary(ui, &p, "Details").clicked() {
             app.actions.push(Action::ShowApp(id));
         }
-    } else if theme::pill(ui, &p, "Learn more").clicked() {
+    } else if theme::secondary(ui, &p, "Learn more").clicked() {
         app.actions.push(Action::OpenUrl(s.app.homepage()));
     }
 }
@@ -691,6 +799,7 @@ fn detail(app: &mut OktoSpaceApp, ui: &mut Ui, id: &str) {
             } else {
                 main_button(app, ui, &s);
                 more_menu(app, ui, &s);
+                favorite_button(app, ui, id);
             }
         });
     });
@@ -778,6 +887,41 @@ fn build_tab(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
             }
         });
     });
+    // How to build it, when the detected way isn't right.
+    ui.add_space(10.0);
+    egui::CollapsingHeader::new("Build options").id_salt(("build-options", &id)).show(ui, |ui| {
+        if app.build_draft.as_ref().is_none_or(|(d, _)| *d != id) {
+            app.build_draft = Some((id.clone(), app.settings.builds.get(&id).cloned().unwrap_or_default()));
+        }
+        let Some((_, draft)) = app.build_draft.as_mut() else { return };
+        let text = |ui: &mut Ui, value: &mut Option<String>, hint: &str, multiline: bool| {
+            let mut s = value.clone().unwrap_or_default();
+            let edit = if multiline {
+                egui::TextEdit::multiline(&mut s).desired_rows(3).code_editor()
+            } else {
+                egui::TextEdit::singleline(&mut s)
+            };
+            ui.add(edit.hint_text(hint).desired_width(f32::INFINITY));
+            *value = (!s.trim().is_empty()).then_some(s);
+        };
+        ui.label("Branch, tag or commit (empty: the latest release, or the default branch)");
+        text(ui, &mut draft.git_ref, "main, v2.0.0, 1a2b3c4…", false);
+        ui.label("Build commands, one per line (empty: the detected build system)");
+        text(ui, &mut draft.commands, "cargo build --release --features gui", true);
+        ui.label("Where the program ends up (empty: the usual places)");
+        text(ui, &mut draft.output, "target/release", false);
+        let draft = draft.clone();
+        ui.horizontal(|ui| {
+            if theme::pill(ui, &p, "Save").clicked() {
+                app.actions.push(Action::SaveBuildOptions(id.clone(), draft.clone()));
+            }
+            if ui.button("Reset to defaults").clicked() {
+                app.build_draft = Some((id.clone(), Default::default()));
+                app.actions.push(Action::SaveBuildOptions(id.clone(), Default::default()));
+            }
+        });
+    });
+
     let Some(log) = app.build_logs.get(&id) else { return };
     ui.add_space(10.0);
     ui.label(RichText::new("Build log").strong());
@@ -882,6 +1026,21 @@ fn overview(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
             if !s.app.extensions.is_empty() {
                 row(ui, "Opens", s.app.extensions.iter().map(|e| format!(".{e}")).collect::<Vec<_>>().join("  "));
             }
+            if let Some(stars) = s.app.stars {
+                row(ui, "Stars", format!("★ {}", short_count(stars)));
+            }
+            if let Some(license) = &s.app.license {
+                row(ui, "Licence", license.clone());
+            }
+            if !s.app.platforms.is_empty() {
+                row(ui, "Downloads for", platform_names(&s.app.platforms));
+            }
+            if let Some(tool) = s.app.build.as_deref().and_then(oktospace_core::build::tool_for) {
+                row(ui, "Builds with", tool.name.to_string());
+            }
+            if let Some(home) = s.app.homepage.as_ref().filter(|h| !h.contains("github.com")) {
+                row(ui, "Website", home.clone());
+            }
             row(ui, "Source", s.app.github_url());
         });
     });
@@ -894,6 +1053,37 @@ fn overview(app: &mut OktoSpaceApp, ui: &mut Ui, s: &AppState) {
             app.actions.push(Action::VerifyAndRepair(id.to_string()));
         }
     });
+
+    // Everything that changed since the installed version (when more than one release).
+    let since = if s.update_available { app.manager.releases_since(id) } else { Vec::new() };
+    if since.len() > 1 {
+        ui.add_space(14.0);
+        let installed = s.installed_version().map(|v| v.to_string()).unwrap_or_default();
+        ui.label(
+            RichText::new(format!("What's changed since {installed} ({} releases)", since.len())).size(17.0).strong(),
+        );
+        for r in &since {
+            egui::CollapsingHeader::new(format!(
+                "{}{}",
+                r.name,
+                r.date().map(|d| format!(" · {d}")).unwrap_or_default()
+            ))
+            .id_salt(("since", id, &r.tag))
+            .default_open(false)
+            .show(ui, |ui| {
+                if r.body.trim().is_empty() {
+                    ui.label(RichText::new("No release notes.").color(p.weak));
+                } else {
+                    egui_commonmark::CommonMarkViewer::new().max_image_width(Some(720)).show(
+                        ui,
+                        &mut app.md_cache,
+                        &r.body,
+                    );
+                }
+            });
+        }
+        return;
+    }
 
     // What's new in the latest release.
     if let Some(r) = s.latest.as_ref().filter(|r| !r.body.trim().is_empty()) {

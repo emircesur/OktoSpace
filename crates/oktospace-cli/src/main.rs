@@ -53,6 +53,24 @@ enum Command {
         /// Only installed apps.
         #[arg(long)]
         installed: bool,
+        /// As JSON (id, name, repository, installed and latest version, update, stars).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Search GitHub for apps (most starred first) and say how to add them.
+    Search { query: Vec<String> },
+    /// Favorite apps: their new releases are checked and announced, installed or not.
+    #[command(alias = "favourites")]
+    Favorites {
+        #[command(subcommand)]
+        action: Option<FavoriteAction>,
+    },
+    /// Add the apps a GitHub user starred to the App library.
+    ImportStars {
+        user: String,
+        /// Only list them.
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Details and release history for one app.
     Info { app: String },
@@ -180,6 +198,16 @@ enum Command {
     Cleanup,
 }
 
+#[derive(Subcommand)]
+enum FavoriteAction {
+    /// The favorite apps.
+    List,
+    /// Mark apps as favorites.
+    Add { apps: Vec<String> },
+    /// Unmark them.
+    Remove { apps: Vec<String> },
+}
+
 #[derive(Clone, Copy, ValueEnum)]
 enum ChannelArg {
     Default,
@@ -296,11 +324,92 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
     }
     let mut failed = 0;
     match cli.command {
-        Command::List { installed } => {
+        Command::List { installed, json } => {
             refresh_all(&manager, cli.refresh);
-            print_table(
-                &manager.states().into_iter().filter(|s| !installed || s.installed.is_some()).collect::<Vec<_>>(),
-            );
+            let states: Vec<_> = manager.states().into_iter().filter(|s| !installed || s.installed.is_some()).collect();
+            if json {
+                let rows: Vec<serde_json::Value> = states
+                    .iter()
+                    .map(|s| {
+                        serde_json::json!({
+                            "id": s.app.id,
+                            "name": s.app.name,
+                            "repo": s.app.repo,
+                            "category": s.app.category,
+                            "installed": s.installed_version().map(|v| v.to_string()),
+                            "built_from_source": s.installed.as_ref().is_some_and(|i| i.current.built_from_source()),
+                            "latest": s.latest_version().map(|v| v.to_string()),
+                            "update_available": s.update_available,
+                            "stars": s.app.stars,
+                            "favorite": manager.is_favorite(&s.app.id),
+                        })
+                    })
+                    .collect();
+                println!("{}", serde_json::to_string_pretty(&rows)?);
+            } else {
+                print_table(&states);
+            }
+        }
+        Command::Search { query } => {
+            let hits = manager.search_github(&query.join(" "))?;
+            let catalog = manager.catalog();
+            for h in hits.iter().filter(|h| !h.archived) {
+                let id = catalog.apps.iter().find(|a| a.repo.eq_ignore_ascii_case(&h.repo)).map(|a| a.id.clone());
+                println!(
+                    "{:<40} ★ {:<7} {}",
+                    h.repo,
+                    h.stars,
+                    id.map(|i| format!("in the library as `{i}`"))
+                        .unwrap_or_else(|| "`oktospace-cli source add` or `build` it".into())
+                );
+                if !h.description.is_empty() {
+                    println!("    {}", h.description.chars().take(100).collect::<String>());
+                }
+            }
+        }
+        Command::Favorites { action } => match action.unwrap_or(FavoriteAction::List) {
+            FavoriteAction::List => {
+                for id in manager.settings().favorites {
+                    println!("{id}");
+                }
+            }
+            FavoriteAction::Add { apps } => {
+                for app in apps {
+                    anyhow::ensure!(manager.app(&app).is_some(), "unknown app {app}");
+                    if !manager.is_favorite(&app) {
+                        manager.toggle_favorite(&app)?;
+                    }
+                    say!("{app} is a favorite.");
+                }
+            }
+            FavoriteAction::Remove { apps } => {
+                for app in apps {
+                    if manager.is_favorite(&app) {
+                        manager.toggle_favorite(&app)?;
+                    }
+                    say!("{app} isn't a favorite.");
+                }
+            }
+        },
+        Command::ImportStars { user, dry_run } => {
+            let hits = manager.starred(&user)?;
+            let mut added = 0;
+            for h in hits.iter().filter(|h| !h.archived) {
+                if dry_run {
+                    println!("{:<40} ★ {}", h.repo, h.stars);
+                    continue;
+                }
+                match manager.add_source_app_to_build(&h.repo) {
+                    Ok(app) => {
+                        added += 1;
+                        say!("{} ({})", app.name, app.id);
+                    }
+                    Err(err) => eprintln!("warning: {}: {err:#}", h.repo),
+                }
+            }
+            if !dry_run {
+                say!("{added} of {}'s starred repositories are in the App library.", user);
+            }
         }
         Command::Info { app } => {
             manager.refresh(&app, cli.refresh)?;
@@ -819,6 +928,15 @@ fn install_in(
 ) -> anyhow::Result<()> {
     if refresh {
         manager.refresh(app, true)?;
+    }
+    // Built from source: an update builds it again.
+    if version.is_none() && manager.installed_app(app).is_some_and(|i| i.current.built_from_source()) {
+        let log = |line: String| println!("  {line}");
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        let report = |_e: ProgressEvent| {};
+        let record = manager.update_app(app, &log, &Progress { report: &report, cancel: &cancel })?;
+        say!("Built and installed {app} {}", record.current.version);
+        return Ok(());
     }
     let mut plan = manager.plan(app, version)?;
     if let Some(dir) = dir {

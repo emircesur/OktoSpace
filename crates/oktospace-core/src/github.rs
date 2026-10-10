@@ -44,6 +44,28 @@ pub struct Asset {
     pub sha256: Option<String>,
 }
 
+/// A repository found on GitHub (a search result or a starred repository).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RepoHit {
+    pub repo: String,
+    pub description: String,
+    pub stars: u64,
+    pub language: Option<String>,
+    pub archived: bool,
+}
+
+impl RepoHit {
+    fn from_json(v: &serde_json::Value) -> Option<RepoHit> {
+        Some(RepoHit {
+            repo: v.get("full_name")?.as_str()?.to_string(),
+            description: v.get("description").and_then(|d| d.as_str()).unwrap_or_default().to_string(),
+            stars: v.get("stargazers_count").and_then(|s| s.as_u64()).unwrap_or(0),
+            language: v.get("language").and_then(|l| l.as_str()).map(str::to_string),
+            archived: v.get("archived").and_then(|a| a.as_bool()).unwrap_or(false),
+        })
+    }
+}
+
 /// Where a release list came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Source {
@@ -190,6 +212,62 @@ impl GitHub {
                 None => Err(anyhow::anyhow!("{api_err:#}; the github.com fallback failed too: {redirect_err:#}")),
             },
         }
+    }
+
+    /// GET an API path as JSON.
+    fn api_json(&self, path: &str) -> anyhow::Result<serde_json::Value> {
+        let url = format!("{}/{path}", self.api_base);
+        let mut req = self
+            .agent
+            .get(&url)
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28");
+        if let Some(token) = &self.token {
+            req = req.header("Authorization", &format!("Bearer {token}"));
+        }
+        let mut resp = req.call()?;
+        crate::http::check_status(&url, resp.status().as_u16())?;
+        Ok(serde_json::from_slice(&resp.body_mut().with_config().limit(8 << 20).read_to_vec()?)?)
+    }
+
+    /// Repositories matching `query`, most starred first.
+    pub fn search_repos(&self, query: &str) -> anyhow::Result<Vec<RepoHit>> {
+        let q: String = query
+            .trim()
+            .bytes()
+            .map(|b| match b {
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' => (b as char).to_string(),
+                b' ' => "+".into(),
+                _ => format!("%{b:02X}"),
+            })
+            .collect();
+        anyhow::ensure!(!q.is_empty(), "type something to search for");
+        let json = self.api_json(&format!("search/repositories?q={q}&sort=stars&order=desc&per_page=30"))?;
+        Ok(json
+            .get("items")
+            .and_then(|i| i.as_array())
+            .map(|a| a.iter().filter_map(RepoHit::from_json).collect())
+            .unwrap_or_default())
+    }
+
+    /// The repositories `user` has starred (up to 300, most recently starred first).
+    pub fn starred(&self, user: &str) -> anyhow::Result<Vec<RepoHit>> {
+        anyhow::ensure!(
+            !user.is_empty() && user.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'),
+            "{user} isn't a GitHub user name"
+        );
+        let mut all = Vec::new();
+        for page in 1..=3 {
+            let json = self.api_json(&format!("users/{user}/starred?per_page=100&page={page}"))?;
+            let items: Vec<RepoHit> =
+                json.as_array().map(|a| a.iter().filter_map(RepoHit::from_json).collect()).unwrap_or_default();
+            let done = items.len() < 100;
+            all.extend(items);
+            if done {
+                break;
+            }
+        }
+        Ok(all)
     }
 
     fn fetch_api(&self, repo: &str, cached: Option<&ReleaseList>) -> anyhow::Result<ReleaseList> {
@@ -500,6 +578,19 @@ pub fn read_cache(cache_dir: &Path, repo: &str) -> Option<ReleaseList> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_search_results() {
+        let json: serde_json::Value = serde_json::from_str(
+            r#"{"items":[{"full_name":"zed-industries/zed","description":"An editor","stargazers_count":70000,"language":"Rust","archived":false},{"description":"no name"}]}"#,
+        )
+        .unwrap();
+        let hits: Vec<RepoHit> = json["items"].as_array().unwrap().iter().filter_map(RepoHit::from_json).collect();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].repo, "zed-industries/zed");
+        assert_eq!(hits[0].stars, 70000);
+        assert_eq!(hits[0].language.as_deref(), Some("Rust"));
+    }
 
     #[test]
     fn parses_sha256sums() {

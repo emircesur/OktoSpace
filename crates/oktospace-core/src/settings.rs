@@ -72,6 +72,22 @@ pub struct Settings {
     pub package_cache_write: bool,
     /// macOS: how the Dock shows OktoSpace's icon.
     pub dock_icon: DockIcon,
+    /// Apps marked as favorites (their new releases are checked and announced, installed or not).
+    pub favorites: Vec<String>,
+    /// Per-app build options (what to build and how), by app id.
+    pub builds: BTreeMap<String, BuildOptions>,
+}
+
+/// How to build an app from source, when the defaults aren't wanted.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BuildOptions {
+    /// A branch, tag or commit to build instead of the latest release.
+    pub git_ref: Option<String>,
+    /// Commands to run instead of the detected build (one per line, run in the source folder).
+    pub commands: Option<String>,
+    /// Where the program ends up, relative to the source (when the commands put it elsewhere).
+    pub output: Option<String>,
 }
 
 /// The Dock icon on macOS. When macOS draws it (the icon in the app), it follows the icon style
@@ -175,6 +191,8 @@ impl Default for Settings {
             package_cache: None,
             package_cache_write: false,
             dock_icon: DockIcon::default(),
+            favorites: Vec::new(),
+            builds: BTreeMap::new(),
         }
     }
 }

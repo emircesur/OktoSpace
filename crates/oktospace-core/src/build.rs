@@ -39,6 +39,8 @@ pub enum System {
     Dotnet,
     Npm,
     Make,
+    /// Commands given in the app's build options.
+    Custom,
 }
 
 impl System {
@@ -53,6 +55,7 @@ impl System {
             System::Dotnet => ".NET",
             System::Npm => "Node.js (npm)",
             System::Make => "Make",
+            System::Custom => "your commands",
         }
     }
 }
@@ -256,6 +259,25 @@ pub fn detect(src: &Path, os: Os) -> Option<Recipe> {
         });
     }
     None
+}
+
+/// A recipe from commands given by hand (one per line, run by the shell in the source folder),
+/// with the program in `output` (or the usual places).
+pub fn custom(commands: &str, output: Option<&str>) -> Recipe {
+    let steps = commands
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(|line| if cfg!(windows) { Step::new("cmd", &["/C", line]) } else { Step::new("sh", &["-c", line]) })
+        .collect();
+    let outputs = match output.map(str::trim).filter(|o| !o.is_empty()) {
+        Some(o) => vec![PathBuf::from(o)],
+        None => ["target/release", OUT, "zig-out/bin", "build", "bin", "dist", "out", "."]
+            .iter()
+            .map(PathBuf::from)
+            .collect(),
+    };
+    Recipe { system: System::Custom, steps, outputs, whole_folder: false, tools: Vec::new() }
 }
 
 /// The tool a library entry's `build` hint (`cargo`, `go`…) needs.
@@ -486,6 +508,19 @@ mod tests {
         let out = tmp.path().join("out");
         crate::archive::tests::no_progress(|p| crate::archive::unpack(&packed, &out, p)).unwrap();
         assert!(out.join("hello").is_file());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn custom_commands_build_too() {
+        let tmp = tempfile::tempdir().unwrap();
+        let recipe =
+            custom("# comment\nmkdir -p out\nprintf '#!/bin/sh\\n' > out/tool && chmod +x out/tool\n", Some("out"));
+        assert_eq!(recipe.system, System::Custom);
+        assert_eq!(recipe.steps.len(), 2);
+        let log = |_l: String| {};
+        crate::archive::tests::no_progress(|p| run(&recipe, tmp.path(), &log, p)).unwrap();
+        assert_eq!(find_output(tmp.path(), &recipe, "tool", Os::Linux), Some(tmp.path().join("out/tool")));
     }
 
     #[test]

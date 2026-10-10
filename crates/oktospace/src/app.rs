@@ -33,6 +33,25 @@ pub enum AppsView {
     Installed,
     Category(String),
     Detail(String),
+    Favorites,
+}
+
+/// How the App library is ordered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LibrarySort {
+    Popular,
+    Name,
+    /// Newest release first (apps whose releases are known).
+    Recent,
+}
+
+/// Which apps the App library shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LibraryFilter {
+    All,
+    /// Something to download for this computer.
+    ForThisComputer,
+    BuildsFromSource,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,6 +79,14 @@ pub enum Action {
     Rollback(String),
     /// Build from source and install (the Build tab shows the log).
     Build(String),
+    ToggleFavorite(String),
+    /// Save an app's build options (Build tab).
+    SaveBuildOptions(String, oktospace_core::settings::BuildOptions),
+    /// The Find on GitHub window: open it, search, load a user's stars, add a repository.
+    OpenGithub,
+    SearchGithub(String),
+    LoadStars(String),
+    AddRepo(String),
     VerifyAndRepair(String),
     Cancel(String),
     Launch(String, Vec<PathBuf>),
@@ -150,6 +177,14 @@ pub struct OktoSpaceApp {
     pub releases_failed: HashMap<String, String>,
     /// Each app's latest build log.
     pub build_logs: HashMap<String, Vec<String>>,
+    pub library_sort: LibrarySort,
+    /// The latest release seen of each favorite (to announce new ones).
+    favorite_seen: HashMap<String, String>,
+    pub library_filter: LibraryFilter,
+    /// The Find on GitHub window.
+    pub github: Option<views::github::Dialog>,
+    /// The build options being edited on the Build tab (app id, options).
+    pub build_draft: Option<(String, oktospace_core::settings::BuildOptions)>,
     pub verify_results: HashMap<String, VerifyReport>,
     pub tours: HashMap<String, Result<oktospace_core::tour::Tour, String>>,
     tour_loading: HashSet<String>,
@@ -228,6 +263,11 @@ impl OktoSpaceApp {
             releases_loading: HashSet::new(),
             releases_failed: HashMap::new(),
             build_logs: HashMap::new(),
+            library_sort: LibrarySort::Popular,
+            favorite_seen: HashMap::new(),
+            library_filter: LibraryFilter::All,
+            github: None,
+            build_draft: None,
             verify_results: HashMap::new(),
             tours: HashMap::new(),
             tour_loading: HashSet::new(),
@@ -369,6 +409,27 @@ impl OktoSpaceApp {
         if let Some(tray) = &self.tray {
             tray.set_updates(self.update_count());
         }
+        // A favorite that isn't installed got a new release since it was last seen.
+        let mut news = Vec::new();
+        for s in &self.states {
+            if !self.settings.favorites.contains(&s.app.id) || s.installed.is_some() {
+                continue;
+            }
+            let Some(tag) = s.latest.as_ref().map(|r| r.tag.clone()) else { continue };
+            match self.favorite_seen.insert(s.app.id.clone(), tag.clone()) {
+                Some(old) if old != tag => {
+                    news.push(format!("{} {}", s.app.name, s.latest_version().map(|v| v.to_string()).unwrap_or(tag)))
+                }
+                _ => {}
+            }
+        }
+        if !news.is_empty() {
+            let text = format!("New release of a favorite: {}", news.join(", "));
+            if self.settings.notifications {
+                worker::notify(text.clone());
+            }
+            self.toast(ToastKind::Info, text);
+        }
     }
 
     /// Whether the organization keeps users from uninstalling and rolling back (and this isn't an
@@ -428,6 +489,25 @@ impl OktoSpaceApp {
                     self.after_refresh(ctx, manual);
                 }
                 Msg::Icons(ids) => theme::load_icons(ctx, &self.manager, Some(&ids)),
+                Msg::GithubResults(result) => {
+                    if let Some(d) = &mut self.github {
+                        d.busy = false;
+                        match result {
+                            Ok(hits) => d.results = hits,
+                            Err(err) => d.error = Some(err),
+                        }
+                    }
+                }
+                Msg::RepoAdded(result) => match result {
+                    Ok(id) => {
+                        reload = true;
+                        if let Some(d) = &mut self.github {
+                            d.added.insert(id.clone());
+                        }
+                        self.toast(ToastKind::Success, format!("{} is in your App library", self.app_name(&id)));
+                    }
+                    Err(err) => self.toast(ToastKind::Error, format!("Couldn't add it: {err}")),
+                },
                 Msg::BuildLog { key, line } => {
                     let log = self.build_logs.entry(key).or_default();
                     log.push(line);
@@ -829,6 +909,50 @@ impl OktoSpaceApp {
                 }
                 Action::Uninstall(id) => self.request(&id, JobKind::Uninstall),
                 Action::Rollback(id) => self.request(&id, JobKind::Rollback),
+                Action::ToggleFavorite(id) => match self.manager.toggle_favorite(&id) {
+                    Ok(now) => {
+                        self.settings = self.manager.settings();
+                        let name = self.app_name(&id);
+                        self.toast(
+                            ToastKind::Info,
+                            if now {
+                                format!("{name} is a favorite: you'll hear about its new releases")
+                            } else {
+                                format!("{name} isn't a favorite any more")
+                            },
+                        );
+                        if now {
+                            self.ensure_releases(&id);
+                        }
+                    }
+                    Err(err) => self.toast(ToastKind::Error, format!("{err:#}")),
+                },
+                Action::SaveBuildOptions(id, options) => {
+                    let mut s = self.settings.clone();
+                    if options == Default::default() {
+                        s.builds.remove(&id);
+                    } else {
+                        s.builds.insert(id.clone(), options);
+                    }
+                    self.save_settings(s);
+                    self.toast(ToastKind::Success, format!("Saved how to build {}", self.app_name(&id)));
+                }
+                Action::OpenGithub => self.github = Some(Default::default()),
+                Action::SearchGithub(q) => {
+                    if let Some(d) = &mut self.github {
+                        d.busy = true;
+                        d.error = None;
+                    }
+                    worker::search_github(&self.bus, &self.manager, q, false);
+                }
+                Action::LoadStars(user) => {
+                    if let Some(d) = &mut self.github {
+                        d.busy = true;
+                        d.error = None;
+                    }
+                    worker::search_github(&self.bus, &self.manager, user, true);
+                }
+                Action::AddRepo(repo) => worker::add_repo(&self.bus, &self.manager, repo),
                 Action::Build(id) => {
                     self.build_logs.remove(&id);
                     if self.apps_view == AppsView::Detail(id.clone()) {
@@ -1344,6 +1468,7 @@ impl OktoSpaceApp {
         views::settings::window(self, ctx);
         views::about::window(self, ctx);
         views::sources::window(self, ctx);
+        views::github::window(self, ctx);
         views::install_mode::window(self, ctx);
     }
 }

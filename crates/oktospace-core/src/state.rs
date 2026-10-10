@@ -48,6 +48,13 @@ pub struct InstalledVersion {
     pub external: Option<crate::detect::External>,
 }
 
+impl InstalledVersion {
+    /// Built from source by OktoSpace (so updates build again).
+    pub fn built_from_source(&self) -> bool {
+        self.asset.ends_with("-built.tar.gz")
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InstalledApp {
     pub id: String,

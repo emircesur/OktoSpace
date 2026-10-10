@@ -1,7 +1,7 @@
 //! Colors, the egui style, and small shared widgets (app badges, pill buttons, cards).
 
 use eframe::egui::{
-    self, Align2, Color32, CornerRadius, FontId, Frame, Margin, Response, RichText, Sense, Stroke, StrokeKind, Ui, Vec2,
+    self, Align2, Color32, CornerRadius, FontId, Frame, Margin, Response, RichText, Sense, Stroke, Ui, Vec2,
 };
 use oktospace_core::settings::Theme;
 use oktospace_core::AppEntry;
@@ -183,12 +183,6 @@ pub fn badge(ui: &mut Ui, app: &AppEntry, size: f32) -> Response {
         let radius = CornerRadius::same((size * 0.2) as u8);
         let fg = hex(&app.colors.fg);
         painter.rect_filled(rect, radius, hex(&app.colors.bg));
-        painter.rect_stroke(
-            rect.shrink(size * 0.04),
-            radius,
-            Stroke::new((size * 0.045).max(1.0), fg),
-            StrokeKind::Inside,
-        );
         painter.text(rect.center(), Align2::CENTER_CENTER, &app.code, FontId::proportional(size * 0.44), fg);
     }
     response
@@ -211,6 +205,17 @@ pub fn primary(ui: &mut Ui, p: &Palette, text: &str) -> Response {
         egui::Button::new(RichText::new(text).color(p.accent_text).strong())
             .fill(p.accent)
             .stroke(Stroke::NONE)
+            .corner_radius(CornerRadius::same(15))
+            .min_size(Vec2::new(64.0, 30.0)),
+    )
+}
+
+/// A softer lime button for the second action next to `primary`, e.g. "Open" beside "Details".
+pub fn secondary(ui: &mut Ui, p: &Palette, text: &str) -> Response {
+    ui.add(
+        egui::Button::new(RichText::new(text).color(p.accent).strong())
+            .fill(p.accent.gamma_multiply(0.16))
+            .stroke(Stroke::new(1.0, p.accent.gamma_multiply(0.45)))
             .corner_radius(CornerRadius::same(15))
             .min_size(Vec2::new(64.0, 30.0)),
     )
