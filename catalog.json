@@ -1,301 +1,7 @@
 {
   "schema": 1,
-  "revision": 3,
+  "revision": 4,
   "apps": [
-    {
-      "id": "photocraft",
-      "name": "PhotoCraft",
-      "code": "Ph",
-      "repo": "storytold/photocraft",
-      "category": "creative-design",
-      "tagline": "Edit photos and layered PSD documents",
-      "description": "A native image editor that works the way Photoshop users expect: familiar menus, shortcuts, panels and tools, with layers, masks, adjustment layers, layer styles, type and brushes.",
-      "colors": {
-        "bg": "#001E36",
-        "fg": "#31A8FF"
-      },
-      "extensions": [
-        "psd",
-        "psb",
-        "png",
-        "jpg",
-        "jpeg",
-        "tif",
-        "tiff",
-        "webp",
-        "gif",
-        "bmp",
-        "tga",
-        "exr",
-        "hdr",
-        "avif",
-        "qoi"
-      ],
-      "featured": true,
-      "icon": "https://raw.githubusercontent.com/storytold/photocraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.photocraft.png",
-      "config_dir": "Photocraft",
-      "curated": true,
-      "homepage": "https://github.com/storytold/photocraft"
-    },
-    {
-      "id": "lightcraft",
-      "name": "LightCraft",
-      "code": "Lt",
-      "repo": "storytold/lightcraft",
-      "category": "creative-design",
-      "tagline": "Organize and develop your photos",
-      "description": "A Lightroom-style photo library and raw developer: catalog, cull, develop and export your photos with non-destructive edits.",
-      "colors": {
-        "bg": "#001D26",
-        "fg": "#3DDBD9"
-      },
-      "extensions": [
-        "dng",
-        "cr2",
-        "cr3",
-        "nef",
-        "arw",
-        "raf",
-        "orf",
-        "rw2",
-        "xmp"
-      ],
-      "icon": "https://raw.githubusercontent.com/storytold/lightcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.lightcraft.png",
-      "curated": true,
-      "homepage": "https://github.com/storytold/lightcraft"
-    },
-    {
-      "id": "vectorcraft",
-      "name": "VectorCraft",
-      "code": "Vc",
-      "repo": "storytold/vectorcraft",
-      "category": "creative-design",
-      "tagline": "Create illustrations and vector graphics",
-      "description": "An Illustrator-style vector editor with pen and shape tools, artboards, gradients, type and SVG/AI interchange.",
-      "colors": {
-        "bg": "#330000",
-        "fg": "#FF9A00"
-      },
-      "extensions": [
-        "ai",
-        "svg",
-        "svgz",
-        "eps"
-      ],
-      "icon": "https://raw.githubusercontent.com/storytold/vectorcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.vectorcraft.png",
-      "curated": true,
-      "homepage": "https://github.com/storytold/vectorcraft"
-    },
-    {
-      "id": "designcraft",
-      "name": "DesignCraft",
-      "code": "Dc",
-      "repo": "storytold/designcraft",
-      "category": "creative-design",
-      "tagline": "Design and publish page layouts",
-      "description": "An InDesign-style page layout and publishing app with IDML import and export.",
-      "colors": {
-        "bg": "#49021F",
-        "fg": "#FF3366"
-      },
-      "extensions": [
-        "idml",
-        "indd"
-      ],
-      "icon": "https://raw.githubusercontent.com/storytold/designcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.designcraft.png",
-      "curated": true,
-      "homepage": "https://github.com/storytold/designcraft"
-    },
-    {
-      "id": "pdfcraft",
-      "name": "PdfCraft",
-      "code": "Pd",
-      "repo": "storytold/pdfcraft",
-      "category": "productivity-utilities",
-      "tagline": "View, edit, sign and organize PDFs",
-      "description": "An Acrobat-style PDF tool to read, annotate, fill, sign, combine and organize PDF documents.",
-      "colors": {
-        "bg": "#3A0505",
-        "fg": "#FF4F4F"
-      },
-      "extensions": [
-        "pdf"
-      ],
-      "icon": "https://raw.githubusercontent.com/storytold/pdfcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.pdfcraft.png",
-      "curated": true,
-      "homepage": "https://github.com/storytold/pdfcraft"
-    },
-    {
-      "id": "filmcraft",
-      "name": "FilmCraft",
-      "code": "Fm",
-      "repo": "storytold/filmcraft",
-      "category": "creative-design",
-      "tagline": "Edit and craft polished films and video",
-      "description": "A Premiere Pro-style timeline video editor: cut, trim, mix audio, grade color and export.",
-      "colors": {
-        "bg": "#00005B",
-        "fg": "#9999FF"
-      },
-      "extensions": [
-        "prproj",
-        "mp4",
-        "mov",
-        "mkv",
-        "webm"
-      ],
-      "icon": "https://raw.githubusercontent.com/storytold/filmcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.filmcraft.png",
-      "curated": true,
-      "homepage": "https://github.com/storytold/filmcraft"
-    },
-    {
-      "id": "effectcraft",
-      "name": "EffectCraft",
-      "code": "Ef",
-      "repo": "storytold/effectcraft",
-      "category": "creative-design",
-      "tagline": "Motion graphics and visual effects",
-      "description": "An After Effects-style compositing and motion graphics app with keyframes, effects, Lottie import/export and render queues.",
-      "colors": {
-        "bg": "#1F0040",
-        "fg": "#CF96FD"
-      },
-      "extensions": [
-        "ecproj",
-        "lottie"
-      ],
-      "icon": "https://raw.githubusercontent.com/storytold/effectcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.effectcraft.png",
-      "curated": true,
-      "homepage": "https://github.com/storytold/effectcraft"
-    },
-    {
-      "id": "soundcraft",
-      "name": "SoundCraft",
-      "code": "Sd",
-      "repo": "storytold/soundcraft",
-      "category": "creative-design",
-      "tagline": "Record, edit and mix audio",
-      "description": "A Pro Tools-style digital audio workstation for recording, editing and mixing multitrack audio.",
-      "colors": {
-        "bg": "#002A26",
-        "fg": "#00E4BB"
-      },
-      "extensions": [
-        "ptx",
-        "wav",
-        "aif",
-        "aiff",
-        "flac",
-        "mp3",
-        "ogg"
-      ],
-      "icon": "https://raw.githubusercontent.com/storytold/soundcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.soundcraft.png",
-      "curated": true,
-      "homepage": "https://github.com/storytold/soundcraft"
-    },
-    {
-      "id": "wordcraft",
-      "name": "WordCraft",
-      "code": "Wd",
-      "repo": "storytold/wordcraft",
-      "category": "productivity-utilities",
-      "tagline": "Write and format documents",
-      "description": "A Word-style word processor with styles, tables, track changes and DOCX compatibility.",
-      "colors": {
-        "bg": "#0B2A5C",
-        "fg": "#5BA8FF"
-      },
-      "extensions": [
-        "docx",
-        "doc",
-        "odt",
-        "rtf"
-      ],
-      "icon": "https://raw.githubusercontent.com/storytold/wordcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.wordcraft.png",
-      "curated": true,
-      "homepage": "https://github.com/storytold/wordcraft"
-    },
-    {
-      "id": "deckcraft",
-      "name": "DeckCraft",
-      "code": "Dk",
-      "repo": "storytold/deckcraft",
-      "category": "productivity-utilities",
-      "tagline": "Build and present slide decks",
-      "description": "A PowerPoint-style presentation app with layouts, themes, animations and PPTX compatibility.",
-      "colors": {
-        "bg": "#3A1306",
-        "fg": "#FF8F6B"
-      },
-      "extensions": [
-        "pptx",
-        "ppt",
-        "odp"
-      ],
-      "icon": "https://raw.githubusercontent.com/storytold/deckcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.deckcraft.png",
-      "curated": true,
-      "homepage": "https://github.com/storytold/deckcraft"
-    },
-    {
-      "id": "gridcraft",
-      "name": "GridCraft",
-      "code": "Gd",
-      "repo": "storytold/gridcraft",
-      "category": "productivity-utilities",
-      "tagline": "Crunch numbers in spreadsheets",
-      "description": "An Excel-style spreadsheet with formulas, charts, pivot tables and XLSX compatibility.",
-      "colors": {
-        "bg": "#0A3018",
-        "fg": "#3FD17A"
-      },
-      "extensions": [
-        "xlsx",
-        "xls",
-        "csv",
-        "ods"
-      ],
-      "icon": "https://raw.githubusercontent.com/storytold/gridcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.gridcraft.png",
-      "curated": true,
-      "homepage": "https://github.com/storytold/gridcraft"
-    },
-    {
-      "id": "cadcraft",
-      "name": "CADCraft",
-      "code": "Cd",
-      "repo": "storytold/cadcraft",
-      "category": "creative-design",
-      "tagline": "Computer-aided design and drafting",
-      "description": "An AutoCAD-style 2D drafting and design app with layers, blocks, dimensions and DXF/DWG interchange.",
-      "colors": {
-        "bg": "#2E2100",
-        "fg": "#FFC24D"
-      },
-      "extensions": [
-        "dwg",
-        "dxf"
-      ],
-      "icon": "https://raw.githubusercontent.com/storytold/cadcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.cadcraft.png",
-      "curated": true,
-      "homepage": "https://github.com/storytold/cadcraft"
-    },
-    {
-      "id": "artcraft",
-      "name": "ArtCraft",
-      "code": "Ac",
-      "repo": "storytold/artcraft",
-      "category": "ai-machine-learning",
-      "tagline": "The crafting engine for AI images and video",
-      "description": "An intentional crafting engine for artists, designers and filmmakers: AI image and video creation with 2D and 3D scene tools.",
-      "colors": {
-        "bg": "#1C0B33",
-        "fg": "#B57BFF"
-      },
-      "homepage": "https://getartcraft.com",
-      "extensions": [],
-      "icon": "https://raw.githubusercontent.com/storytold/artcraft/HEAD/crates/desktop/artcraft/icons/128x128@2x.png",
-      "windows_installer": "exe",
-      "curated": true
-    },
     {
       "id": "openclaw",
       "name": "OpenClaw",
@@ -309,7 +15,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/openclaw.png?size=128",
-      "stars": 391589,
+      "stars": 391588,
       "platforms": [
         "linux",
         "macos",
@@ -317,7 +23,8 @@
       ],
       "homepage": "https://openclaw.ai",
       "license": "MIT",
-      "build": "npm"
+      "build": "npm",
+      "featured": true
     },
     {
       "id": "opencode",
@@ -332,7 +39,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/anomalyco.png?size=128",
-      "stars": 212520,
+      "stars": 212524,
       "platforms": [
         "linux",
         "macos",
@@ -340,7 +47,8 @@
       ],
       "homepage": "https://opencode.ai",
       "license": "MIT",
-      "build": "npm"
+      "build": "npm",
+      "featured": true
     },
     {
       "id": "ollama",
@@ -355,14 +63,15 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/ollama.png?size=128",
-      "stars": 182624,
+      "stars": 182625,
       "platforms": [
         "macos",
         "windows"
       ],
       "homepage": "https://ollama.com",
       "license": "MIT",
-      "build": "go"
+      "build": "go",
+      "featured": true
     },
     {
       "id": "dify",
@@ -377,12 +86,13 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/langgenius.png?size=128",
-      "stars": 158087,
+      "stars": 158089,
       "platforms": [
         "windows"
       ],
       "homepage": "https://dify.ai",
-      "build": "make"
+      "build": "make",
+      "featured": true
     },
     {
       "id": "llama-cpp",
@@ -397,14 +107,15 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/ggml-org.png?size=128",
-      "stars": 130741,
+      "stars": 130745,
       "platforms": [
         "linux",
         "windows"
       ],
       "homepage": "https://llama.app",
       "license": "MIT",
-      "build": "cmake"
+      "build": "cmake",
+      "featured": true
     },
     {
       "id": "rustdesk",
@@ -419,7 +130,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/rustdesk.png?size=128",
-      "stars": 125407,
+      "stars": 125410,
       "platforms": [
         "linux",
         "macos",
@@ -427,7 +138,8 @@
       ],
       "homepage": "https://rustdesk.com",
       "license": "AGPL-3.0",
-      "build": "cargo"
+      "build": "cargo",
+      "featured": true
     },
     {
       "id": "godot",
@@ -442,12 +154,13 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/godotengine.png?size=128",
-      "stars": 118222,
+      "stars": 118226,
       "platforms": [
         "windows"
       ],
       "homepage": "https://godotengine.org",
-      "license": "MIT"
+      "license": "MIT",
+      "featured": true
     },
     {
       "id": "pi",
@@ -462,13 +175,14 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/earendil-works.png?size=128",
-      "stars": 114067,
+      "stars": 114075,
       "platforms": [
         "linux",
         "windows"
       ],
       "license": "MIT",
-      "build": "npm"
+      "build": "npm",
+      "featured": true
     },
     {
       "id": "neovim",
@@ -483,13 +197,14 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/neovim.png?size=128",
-      "stars": 102976,
+      "stars": 102977,
       "platforms": [
         "linux",
         "windows"
       ],
       "homepage": "https://neovim.io",
-      "build": "cmake"
+      "build": "cmake",
+      "featured": true
     },
     {
       "id": "localsend",
@@ -504,7 +219,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/localsend.png?size=128",
-      "stars": 93888,
+      "stars": 93891,
       "platforms": [
         "linux",
         "macos",
@@ -512,7 +227,8 @@
       ],
       "homepage": "https://localsend.org",
       "license": "Apache-2.0",
-      "build": "cargo"
+      "build": "cargo",
+      "featured": true
     },
     {
       "id": "zed",
@@ -527,14 +243,15 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/zed-industries.png?size=128",
-      "stars": 91539,
+      "stars": 91543,
       "platforms": [
         "linux",
         "macos",
         "windows"
       ],
       "homepage": "https://zed.dev",
-      "build": "cargo"
+      "build": "cargo",
+      "featured": true
     },
     {
       "id": "openhands",
@@ -549,7 +266,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/OpenHands.png?size=128",
-      "stars": 90490,
+      "stars": 90494,
       "platforms": [
         "linux",
         "macos",
@@ -557,7 +274,8 @@
       ],
       "homepage": "https://openhands.dev",
       "license": "MIT",
-      "build": "npm"
+      "build": "npm",
+      "featured": true
     },
     {
       "id": "orca",
@@ -572,7 +290,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/stablyai.png?size=128",
-      "stars": 89044,
+      "stars": 89071,
       "platforms": [
         "linux",
         "macos",
@@ -674,7 +392,7 @@
       "name": "AppFlowy",
       "code": "Ap",
       "repo": "AppFlowy-IO/AppFlowy",
-      "category": "business-software",
+      "category": "productivity-utilities",
       "tagline": "AI workspace for docs, projects, and wikis you control",
       "description": "Bring projects, wikis, and teams together with AI. AppFlowy is the AI collaborative workspace where you achieve more without losing control of your data. The leading open source Notion alternative.",
       "colors": {
@@ -682,7 +400,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/AppFlowy-IO.png?size=128",
-      "stars": 77222,
+      "stars": 77225,
       "platforms": [
         "linux",
         "macos",
@@ -717,7 +435,7 @@
       "name": "Affine",
       "code": "Af",
       "repo": "toeverything/AFFiNE",
-      "category": "productivity-utilities",
+      "category": "business-software",
       "tagline": "Docs, whiteboards, and databases in one privacy-first workspace",
       "description": "There can be more than Notion and Miro. AFFiNE(pronounced [ə‘fain]) is a next-gen knowledge base that brings planning, sorting and creating all together. Privacy first, open-source, customizable and ready to use.",
       "colors": {
@@ -746,7 +464,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/dani-garcia.png?size=128",
-      "stars": 68796,
+      "stars": 68798,
       "platforms": [],
       "license": "AGPL-3.0",
       "build": "cargo"
@@ -764,7 +482,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/openinterpreter.png?size=128",
-      "stars": 68540,
+      "stars": 68541,
       "platforms": [
         "linux",
         "macos",
@@ -787,7 +505,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/Mintplex-Labs.png?size=128",
-      "stars": 66894,
+      "stars": 66897,
       "platforms": [
         "linux",
         "macos",
@@ -829,7 +547,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/prometheus.png?size=128",
-      "stars": 66461,
+      "stars": 66460,
       "platforms": [
         "linux",
         "windows"
@@ -892,7 +610,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/usememos.png?size=128",
-      "stars": 63667,
+      "stars": 63669,
       "platforms": [
         "linux",
         "windows"
@@ -914,7 +632,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/ghostty-org.png?size=128",
-      "stars": 62034,
+      "stars": 62035,
       "platforms": [
         "macos"
       ],
@@ -956,7 +674,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/meilisearch.png?size=128",
-      "stars": 59537,
+      "stars": 59538,
       "platforms": [
         "windows"
       ],
@@ -976,7 +694,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/go-gitea.png?size=128",
-      "stars": 58411,
+      "stars": 58412,
       "platforms": [
         "windows"
       ],
@@ -997,7 +715,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/jellyfin.png?size=128",
-      "stars": 57975,
+      "stars": 57976,
       "platforms": [],
       "homepage": "https://jellyfin.org",
       "license": "GPL-2.0",
@@ -1016,7 +734,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/laurent22.png?size=128",
-      "stars": 56661,
+      "stars": 56665,
       "platforms": [
         "linux",
         "macos",
@@ -1030,7 +748,7 @@
       "name": "Goose",
       "code": "Go",
       "repo": "aaif-goose/goose",
-      "category": "ai-machine-learning",
+      "category": "developer-tools",
       "tagline": "General-purpose AI agent for code, workflows, and more",
       "description": "an open source, extensible AI agent that goes beyond code suggestions - install, execute, edit, and test with any LLM",
       "colors": {
@@ -1060,7 +778,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/CherryHQ.png?size=128",
-      "stars": 52519,
+      "stars": 52520,
       "platforms": [
         "linux",
         "macos",
@@ -1083,7 +801,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/multica-ai.png?size=128",
-      "stars": 52401,
+      "stars": 52403,
       "platforms": [
         "linux",
         "macos",
@@ -1105,7 +823,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/dbeaver.png?size=128",
-      "stars": 52003,
+      "stars": 52005,
       "platforms": [
         "linux",
         "macos",
@@ -1148,7 +866,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/mudler.png?size=128",
-      "stars": 49458,
+      "stars": 49459,
       "platforms": [
         "macos"
       ],
@@ -1214,7 +932,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/siyuan-note.png?size=128",
-      "stars": 46707,
+      "stars": 46708,
       "platforms": [
         "linux",
         "macos",
@@ -1247,7 +965,7 @@
       "name": "Hyperswitch",
       "code": "Hy",
       "repo": "juspay/hyperswitch",
-      "category": "business-software",
+      "category": "miscellaneous",
       "tagline": "Open source payment orchestrator for global transactions",
       "description": "Open source, composable payments platform | PCI compliant | SaaS and Self-host options | Enables connectivity to multiple payment, payout, fraud, vault and tokenization providers | Uplifts authorization with intelligent routing and revenue recovery | Reduce payment processing costs with cost observability | Reduces payment ops with reconciliation",
       "colors": {
@@ -1255,7 +973,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/juspay.png?size=128",
-      "stars": 45302,
+      "stars": 45305,
       "platforms": [],
       "homepage": "https://hyperswitch.io/",
       "license": "Apache-2.0",
@@ -1274,7 +992,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/logseq.png?size=128",
-      "stars": 45198,
+      "stars": 45199,
       "platforms": [
         "linux",
         "macos",
@@ -1297,7 +1015,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/janhq.png?size=128",
-      "stars": 44878,
+      "stars": 44879,
       "platforms": [
         "linux",
         "macos",
@@ -1319,7 +1037,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/zen-browser.png?size=128",
-      "stars": 44858,
+      "stars": 44859,
       "platforms": [
         "linux",
         "macos",
@@ -1342,7 +1060,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/mifi.png?size=128",
-      "stars": 44440,
+      "stars": 44442,
       "platforms": [
         "linux",
         "macos"
@@ -1369,6 +1087,41 @@
       "homepage": "https://www.tidb.io/",
       "license": "Apache-2.0",
       "build": "go"
+    },
+    {
+      "id": "photocraft",
+      "name": "PhotoCraft",
+      "code": "Ph",
+      "repo": "storytold/photocraft",
+      "category": "creative-design",
+      "tagline": "Edit photos and layered PSD documents",
+      "description": "A native image editor that works the way Photoshop users expect: familiar menus, shortcuts, panels and tools, with layers, masks, adjustment layers, layer styles, type and brushes.",
+      "colors": {
+        "bg": "#001E36",
+        "fg": "#31A8FF"
+      },
+      "extensions": [
+        "psd",
+        "psb",
+        "png",
+        "jpg",
+        "jpeg",
+        "tif",
+        "tiff",
+        "webp",
+        "gif",
+        "bmp",
+        "tga",
+        "exr",
+        "hdr",
+        "avif",
+        "qoi"
+      ],
+      "icon": "https://raw.githubusercontent.com/storytold/photocraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.photocraft.png",
+      "config_dir": "Photocraft",
+      "curated": true,
+      "homepage": "https://github.com/storytold/photocraft",
+      "stars": 40621
     },
     {
       "id": "insomnia",
@@ -1406,7 +1159,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/ShareX.png?size=128",
-      "stars": 39975,
+      "stars": 39977,
       "platforms": [
         "windows"
       ],
@@ -1427,7 +1180,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/spacedriveapp.png?size=128",
-      "stars": 39089,
+      "stars": 39090,
       "platforms": [
         "linux",
         "macos",
@@ -1488,7 +1241,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/IceWhaleTech.png?size=128",
-      "stars": 37297,
+      "stars": 37298,
       "platforms": [
         "linux"
       ],
@@ -1528,7 +1281,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/permissionlesstech.png?size=128",
-      "stars": 36531,
+      "stars": 36532,
       "platforms": [],
       "license": "Unlicense",
       "build": "swift"
@@ -1556,7 +1309,7 @@
       "name": "Lightpanda",
       "code": "Li",
       "repo": "lightpanda-io/browser",
-      "category": "ai-machine-learning",
+      "category": "data-analytics",
       "tagline": "Fast, AI-native web browser built for automation and scraping",
       "description": "Lightpanda: the headless browser designed for AI and automation",
       "colors": {
@@ -1564,7 +1317,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/lightpanda-io.png?size=128",
-      "stars": 36203,
+      "stars": 36207,
       "platforms": [
         "linux"
       ],
@@ -1585,7 +1338,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/block.png?size=128",
-      "stars": 35815,
+      "stars": 35818,
       "platforms": [
         "linux",
         "macos",
@@ -1650,7 +1403,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/qdrant.png?size=128",
-      "stars": 35009,
+      "stars": 35008,
       "platforms": [
         "linux",
         "windows"
@@ -1672,7 +1425,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/binwiederhier.png?size=128",
-      "stars": 34732,
+      "stars": 34733,
       "platforms": [
         "linux",
         "windows"
@@ -1715,7 +1468,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/cjpais.png?size=128",
-      "stars": 33432,
+      "stars": 33434,
       "platforms": [
         "linux",
         "macos",
@@ -1783,7 +1536,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/Fincept-Corporation.png?size=128",
-      "stars": 32360,
+      "stars": 32361,
       "platforms": [
         "linux",
         "macos",
@@ -1831,6 +1584,27 @@
       "build": "make"
     },
     {
+      "id": "nuclei",
+      "name": "ProjectDiscovery",
+      "code": "Pr",
+      "repo": "projectdiscovery/nuclei",
+      "category": "infrastructure-operations",
+      "tagline": "Advanced vulnerability detection and management platform",
+      "description": "Nuclei is a fast, customizable vulnerability scanner powered by the global security community and built on a simple YAML-based DSL, enabling collaboration to tackle trending vulnerabilities on the internet. It helps you find vulnerabilities in your applications, APIs, networks, DNS, and cloud configurations.",
+      "colors": {
+        "bg": "#14B8A6",
+        "fg": "#FFFFFF"
+      },
+      "icon": "https://github.com/projectdiscovery.png?size=128",
+      "stars": 31899,
+      "platforms": [
+        "windows"
+      ],
+      "homepage": "https://docs.projectdiscovery.io/tools/nuclei",
+      "license": "MIT",
+      "build": "go"
+    },
+    {
       "id": "anki",
       "name": "Anki",
       "code": "An",
@@ -1852,27 +1626,6 @@
       "build": "cargo"
     },
     {
-      "id": "nuclei",
-      "name": "ProjectDiscovery",
-      "code": "Pr",
-      "repo": "projectdiscovery/nuclei",
-      "category": "infrastructure-operations",
-      "tagline": "Advanced vulnerability detection and management platform",
-      "description": "Nuclei is a fast, customizable vulnerability scanner powered by the global security community and built on a simple YAML-based DSL, enabling collaboration to tackle trending vulnerabilities on the internet. It helps you find vulnerabilities in your applications, APIs, networks, DNS, and cloud configurations.",
-      "colors": {
-        "bg": "#14B8A6",
-        "fg": "#FFFFFF"
-      },
-      "icon": "https://github.com/projectdiscovery.png?size=128",
-      "stars": 31894,
-      "platforms": [
-        "windows"
-      ],
-      "homepage": "https://docs.projectdiscovery.io/tools/nuclei",
-      "license": "MIT",
-      "build": "go"
-    },
-    {
       "id": "dragonfly",
       "name": "Dragonfly",
       "code": "Dr",
@@ -1885,7 +1638,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/dragonflydb.png?size=128",
-      "stars": 31771,
+      "stars": 31773,
       "platforms": [
         "linux"
       ],
@@ -1946,7 +1699,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/opentofu.png?size=128",
-      "stars": 30443,
+      "stars": 30444,
       "platforms": [
         "linux",
         "windows"
@@ -1968,7 +1721,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/netbirdio.png?size=128",
-      "stars": 29846,
+      "stars": 29847,
       "platforms": [
         "linux",
         "windows"
@@ -2155,7 +1908,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/4ian.png?size=128",
-      "stars": 27346,
+      "stars": 27349,
       "platforms": [
         "linux",
         "macos",
@@ -2177,7 +1930,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/xai-org.png?size=128",
-      "stars": 27307,
+      "stars": 27308,
       "platforms": [],
       "license": "Apache-2.0",
       "build": "cargo"
@@ -2195,7 +1948,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/onlook-dev.png?size=128",
-      "stars": 26890,
+      "stars": 26889,
       "platforms": [
         "linux",
         "macos",
@@ -2218,7 +1971,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/typesense.png?size=128",
-      "stars": 26846,
+      "stars": 26847,
       "platforms": [],
       "homepage": "https://typesense.org",
       "license": "GPL-3.0",
@@ -2237,7 +1990,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/pingdotgg.png?size=128",
-      "stars": 26760,
+      "stars": 26770,
       "platforms": [
         "linux",
         "macos",
@@ -2282,7 +2035,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/iv-org.png?size=128",
-      "stars": 25177,
+      "stars": 25178,
       "platforms": [],
       "homepage": "https://invidious.io",
       "license": "AGPL-3.0",
@@ -2320,7 +2073,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/navidrome.png?size=128",
-      "stars": 24078,
+      "stars": 24081,
       "platforms": [
         "linux",
         "windows"
@@ -2408,7 +2161,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/beekeeper-studio.png?size=128",
-      "stars": 23718,
+      "stars": 23719,
       "platforms": [
         "linux",
         "macos",
@@ -2450,7 +2203,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/temporalio.png?size=128",
-      "stars": 23582,
+      "stars": 23583,
       "platforms": [
         "linux",
         "windows"
@@ -2458,6 +2211,24 @@
       "homepage": "https://docs.temporal.io",
       "license": "MIT",
       "build": "go"
+    },
+    {
+      "id": "cap",
+      "name": "Cap",
+      "code": "Ca",
+      "repo": "CapSoftware/Cap",
+      "category": "productivity-utilities",
+      "tagline": "Screen recorder with instant sharing and a built-in editor",
+      "description": "Open source Loom alternative. Beautiful, shareable screen recordings.",
+      "colors": {
+        "bg": "#F59E0B",
+        "fg": "#FFFFFF"
+      },
+      "icon": "https://github.com/CapSoftware.png?size=128",
+      "stars": 23184,
+      "platforms": [],
+      "homepage": "https://cap.so",
+      "build": "cargo"
     },
     {
       "id": "neon",
@@ -2476,24 +2247,6 @@
       "platforms": [],
       "homepage": "https://neon.tech",
       "license": "Apache-2.0",
-      "build": "cargo"
-    },
-    {
-      "id": "cap",
-      "name": "Cap",
-      "code": "Ca",
-      "repo": "CapSoftware/Cap",
-      "category": "productivity-utilities",
-      "tagline": "Screen recorder with instant sharing and a built-in editor",
-      "description": "Open source Loom alternative. Beautiful, shareable screen recordings.",
-      "colors": {
-        "bg": "#F59E0B",
-        "fg": "#FFFFFF"
-      },
-      "icon": "https://github.com/CapSoftware.png?size=128",
-      "stars": 23181,
-      "platforms": [],
-      "homepage": "https://cap.so",
       "build": "cargo"
     },
     {
@@ -2521,7 +2274,7 @@
       "name": "Super Productivity",
       "code": "Sp",
       "repo": "super-productivity/super-productivity",
-      "category": "business-software",
+      "category": "productivity-utilities",
       "tagline": "Task manager with time tracking, focus mode, and deep work tools",
       "description": "Super Productivity is an advanced todo list app with integrated Timeboxing and time tracking capabilities. It also comes with integrations for Jira, GitLab, GitHub and Open Project.",
       "colors": {
@@ -2529,7 +2282,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/super-productivity.png?size=128",
-      "stars": 22706,
+      "stars": 22708,
       "platforms": [
         "linux",
         "macos",
@@ -2552,7 +2305,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/vectordotdev.png?size=128",
-      "stars": 22684,
+      "stars": 22685,
       "platforms": [
         "linux"
       ],
@@ -2735,7 +2488,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/getpaseo.png?size=128",
-      "stars": 20388,
+      "stars": 20391,
       "platforms": [
         "linux",
         "macos",
@@ -2757,7 +2510,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/kortix-ai.png?size=128",
-      "stars": 20261,
+      "stars": 20262,
       "platforms": [
         "linux",
         "macos",
@@ -2846,7 +2599,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/ActivityWatch.png?size=128",
-      "stars": 19171,
+      "stars": 19172,
       "platforms": [
         "linux",
         "macos",
@@ -2891,7 +2644,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/nukeop.png?size=128",
-      "stars": 18648,
+      "stars": 18649,
       "platforms": [
         "linux",
         "macos",
@@ -2914,7 +2667,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/keploy.png?size=128",
-      "stars": 18545,
+      "stars": 18546,
       "platforms": [
         "linux"
       ],
@@ -3055,7 +2808,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/ceph.png?size=128",
-      "stars": 17103,
+      "stars": 17105,
       "platforms": [],
       "homepage": "https://ceph.io",
       "build": "cmake"
@@ -3073,7 +2826,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/coder.png?size=128",
-      "stars": 16933,
+      "stars": 16936,
       "platforms": [
         "linux",
         "windows"
@@ -3136,7 +2889,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/Automattic.png?size=128",
-      "stars": 16262,
+      "stars": 16265,
       "platforms": [
         "linux",
         "macos",
@@ -3151,7 +2904,7 @@
       "name": "Apache Answer",
       "code": "Aa",
       "repo": "apache/answer",
-      "category": "community-social",
+      "category": "content-publishing",
       "tagline": "Open-source Q&A platform for knowledge sharing",
       "description": "A Q&A platform software for teams at any scales. Whether it's a community forum, help center, or knowledge management platform, you can always count on Apache Answer.",
       "colors": {
@@ -3180,7 +2933,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/organicmaps.png?size=128",
-      "stars": 15633,
+      "stars": 15634,
       "platforms": [],
       "homepage": "https://organicmaps.app",
       "build": "cmake"
@@ -3221,7 +2974,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/robbietilton.png?size=128",
-      "stars": 15384,
+      "stars": 15402,
       "platforms": [
         "macos"
       ],
@@ -3281,7 +3034,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/zitadel.png?size=128",
-      "stars": 15268,
+      "stars": 15269,
       "platforms": [
         "linux"
       ],
@@ -3323,7 +3076,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/superset-sh.png?size=128",
-      "stars": 15049,
+      "stars": 15050,
       "platforms": [
         "linux",
         "macos"
@@ -3419,7 +3172,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/espanso.png?size=128",
-      "stars": 14609,
+      "stars": 14610,
       "platforms": [
         "linux",
         "macos",
@@ -3460,7 +3213,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/MonoGame.png?size=128",
-      "stars": 14502,
+      "stars": 14503,
       "platforms": [],
       "homepage": "http://www.monogame.net",
       "build": "dotnet"
@@ -3478,7 +3231,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/ory.png?size=128",
-      "stars": 13914,
+      "stars": 13915,
       "platforms": [
         "linux",
         "windows"
@@ -3486,6 +3239,25 @@
       "homepage": "https://www.ory.com/?utm_source=github&utm_medium=banner&utm_campaign=kratos",
       "license": "Apache-2.0",
       "build": "go"
+    },
+    {
+      "id": "artcraft",
+      "name": "ArtCraft",
+      "code": "Ac",
+      "repo": "storytold/artcraft",
+      "category": "ai-machine-learning",
+      "tagline": "The crafting engine for AI images and video",
+      "description": "An intentional crafting engine for artists, designers and filmmakers: AI image and video creation with 2D and 3D scene tools.",
+      "colors": {
+        "bg": "#1C0B33",
+        "fg": "#B57BFF"
+      },
+      "homepage": "https://getartcraft.com",
+      "extensions": [],
+      "icon": "https://raw.githubusercontent.com/storytold/artcraft/HEAD/crates/desktop/artcraft/icons/128x128@2x.png",
+      "windows_installer": "exe",
+      "curated": true,
+      "stars": 13736
     },
     {
       "id": "darktable",
@@ -3783,7 +3555,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/we-promise.png?size=128",
-      "stars": 10464,
+      "stars": 10465,
       "platforms": [
         "macos"
       ],
@@ -3825,7 +3597,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/pocket-id.png?size=128",
-      "stars": 9520,
+      "stars": 9522,
       "platforms": [
         "windows"
       ],
@@ -3889,7 +3661,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/OpenWhispr.png?size=128",
-      "stars": 9228,
+      "stars": 9229,
       "platforms": [
         "windows"
       ],
@@ -3910,7 +3682,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/wealthfolio.png?size=128",
-      "stars": 9154,
+      "stars": 9155,
       "platforms": [
         "linux",
         "macos",
@@ -3975,7 +3747,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/open-pencil.png?size=128",
-      "stars": 8849,
+      "stars": 8850,
       "platforms": [
         "linux",
         "macos",
@@ -3984,6 +3756,34 @@
       "homepage": "https://openpencil.dev",
       "license": "MIT",
       "build": "npm"
+    },
+    {
+      "id": "lightcraft",
+      "name": "LightCraft",
+      "code": "Lt",
+      "repo": "storytold/lightcraft",
+      "category": "creative-design",
+      "tagline": "Organize and develop your photos",
+      "description": "A Lightroom-style photo library and raw developer: catalog, cull, develop and export your photos with non-destructive edits.",
+      "colors": {
+        "bg": "#001D26",
+        "fg": "#3DDBD9"
+      },
+      "extensions": [
+        "dng",
+        "cr2",
+        "cr3",
+        "nef",
+        "arw",
+        "raf",
+        "orf",
+        "rw2",
+        "xmp"
+      ],
+      "icon": "https://raw.githubusercontent.com/storytold/lightcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.lightcraft.png",
+      "curated": true,
+      "homepage": "https://github.com/storytold/lightcraft",
+      "stars": 8733
     },
     {
       "id": "falkordb",
@@ -3998,7 +3798,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/FalkorDB.png?size=128",
-      "stars": 8701,
+      "stars": 8708,
       "platforms": [],
       "homepage": "https://www.falkordb.com/",
       "build": "cargo"
@@ -4044,6 +3844,30 @@
       "homepage": "https://mockoon.com",
       "license": "MIT",
       "build": "npm"
+    },
+    {
+      "id": "filmcraft",
+      "name": "FilmCraft",
+      "code": "Fm",
+      "repo": "storytold/filmcraft",
+      "category": "creative-design",
+      "tagline": "Edit and craft polished films and video",
+      "description": "A Premiere Pro-style timeline video editor: cut, trim, mix audio, grade color and export.",
+      "colors": {
+        "bg": "#00005B",
+        "fg": "#9999FF"
+      },
+      "extensions": [
+        "prproj",
+        "mp4",
+        "mov",
+        "mkv",
+        "webm"
+      ],
+      "icon": "https://raw.githubusercontent.com/storytold/filmcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.filmcraft.png",
+      "curated": true,
+      "homepage": "https://github.com/storytold/filmcraft",
+      "stars": 8279
     },
     {
       "id": "hatchet",
@@ -4098,7 +3922,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/woodpecker-ci.png?size=128",
-      "stars": 7977,
+      "stars": 7978,
       "platforms": [
         "linux",
         "windows"
@@ -4169,6 +3993,26 @@
       "build": "cargo"
     },
     {
+      "id": "pdfcraft",
+      "name": "PdfCraft",
+      "code": "Pd",
+      "repo": "storytold/pdfcraft",
+      "category": "productivity-utilities",
+      "tagline": "View, edit, sign and organize PDFs",
+      "description": "An Acrobat-style PDF tool to read, annotate, fill, sign, combine and organize PDF documents.",
+      "colors": {
+        "bg": "#3A0505",
+        "fg": "#FF4F4F"
+      },
+      "extensions": [
+        "pdf"
+      ],
+      "icon": "https://raw.githubusercontent.com/storytold/pdfcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.pdfcraft.png",
+      "curated": true,
+      "homepage": "https://github.com/storytold/pdfcraft",
+      "stars": 7616
+    },
+    {
       "id": "documentserver",
       "name": "ONLYOFFICE Docs",
       "code": "Od",
@@ -4181,7 +4025,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/ONLYOFFICE.png?size=128",
-      "stars": 6986,
+      "stars": 6987,
       "platforms": [
         "linux",
         "windows"
@@ -4194,7 +4038,7 @@
       "name": "Flexprice",
       "code": "Fl",
       "repo": "flexprice/flexprice",
-      "category": "business-software",
+      "category": "infrastructure-operations",
       "tagline": "Open source metering and billing infrastructure for any pricing model",
       "description": "Usage-based pricing and billing for developers 🔓 Cloud or self-hosted ⚙️ No-code UI 💰 Realtime usage metering 🎟 Credits & top-ups 🔑 Control feature access",
       "colors": {
@@ -4202,7 +4046,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/flexprice.png?size=128",
-      "stars": 6886,
+      "stars": 6894,
       "platforms": [],
       "homepage": "https://flexprice.io",
       "license": "AGPL-3.0",
@@ -4372,6 +4216,26 @@
       "build": "cargo"
     },
     {
+      "id": "lightdash",
+      "name": "Lightdash",
+      "code": "Li",
+      "repo": "lightdash/lightdash",
+      "category": "data-analytics",
+      "tagline": "Open-source BI for modern data teams",
+      "description": "Agentic BI. Analytics at the speed of code ⚡️",
+      "colors": {
+        "bg": "#F97316",
+        "fg": "#FFFFFF"
+      },
+      "icon": "https://github.com/lightdash.png?size=128",
+      "stars": 6182,
+      "platforms": [
+        "linux"
+      ],
+      "homepage": "https://lightdash.com",
+      "build": "npm"
+    },
+    {
       "id": "cosmos-server",
       "name": "Cosmos Server",
       "code": "Cs",
@@ -4384,7 +4248,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/azukaar.png?size=128",
-      "stars": 6179,
+      "stars": 6180,
       "platforms": [],
       "homepage": "https://cosmos-cloud.io",
       "build": "go"
@@ -4402,7 +4266,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/HelixDB.png?size=128",
-      "stars": 6168,
+      "stars": 6170,
       "platforms": [
         "windows"
       ],
@@ -4442,7 +4306,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/Permify.png?size=128",
-      "stars": 5961,
+      "stars": 5962,
       "platforms": [
         "linux"
       ],
@@ -4486,13 +4350,36 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/inngest.png?size=128",
-      "stars": 5930,
+      "stars": 5931,
       "platforms": [
         "linux",
         "windows"
       ],
       "homepage": "https://www.inngest.com/docs",
       "build": "go"
+    },
+    {
+      "id": "vectorcraft",
+      "name": "VectorCraft",
+      "code": "Vc",
+      "repo": "storytold/vectorcraft",
+      "category": "creative-design",
+      "tagline": "Create illustrations and vector graphics",
+      "description": "An Illustrator-style vector editor with pen and shape tools, artboards, gradients, type and SVG/AI interchange.",
+      "colors": {
+        "bg": "#330000",
+        "fg": "#FF9A00"
+      },
+      "extensions": [
+        "ai",
+        "svg",
+        "svgz",
+        "eps"
+      ],
+      "icon": "https://raw.githubusercontent.com/storytold/vectorcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.vectorcraft.png",
+      "curated": true,
+      "homepage": "https://github.com/storytold/vectorcraft",
+      "stars": 5922
     },
     {
       "id": "scanopy",
@@ -4528,7 +4415,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/workadventure.png?size=128",
-      "stars": 5844,
+      "stars": 5845,
       "platforms": [
         "linux",
         "macos",
@@ -4550,7 +4437,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/KDE.png?size=128",
-      "stars": 5823,
+      "stars": 5824,
       "platforms": [],
       "homepage": "https://invent.kde.org/multimedia/kdenlive",
       "license": "GPL-3.0",
@@ -4569,7 +4456,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/mayswind.png?size=128",
-      "stars": 5744,
+      "stars": 5745,
       "platforms": [
         "linux",
         "windows"
@@ -4654,7 +4541,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/colanode.png?size=128",
-      "stars": 5164,
+      "stars": 5165,
       "platforms": [
         "macos",
         "windows"
@@ -4676,7 +4563,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/TabularisDB.png?size=128",
-      "stars": 5156,
+      "stars": 5158,
       "platforms": [
         "linux",
         "macos",
@@ -4759,7 +4646,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/cerbos.png?size=128",
-      "stars": 4616,
+      "stars": 4617,
       "platforms": [
         "linux"
       ],
@@ -4780,7 +4667,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/memgraph.png?size=128",
-      "stars": 4606,
+      "stars": 4607,
       "platforms": [],
       "homepage": "https://memgraph.com",
       "build": "cmake"
@@ -4849,6 +4736,27 @@
       "build": "go"
     },
     {
+      "id": "effectcraft",
+      "name": "EffectCraft",
+      "code": "Ef",
+      "repo": "storytold/effectcraft",
+      "category": "creative-design",
+      "tagline": "Motion graphics and visual effects",
+      "description": "An After Effects-style compositing and motion graphics app with keyframes, effects, Lottie import/export and render queues.",
+      "colors": {
+        "bg": "#1F0040",
+        "fg": "#CF96FD"
+      },
+      "extensions": [
+        "ecproj",
+        "lottie"
+      ],
+      "icon": "https://raw.githubusercontent.com/storytold/effectcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.effectcraft.png",
+      "curated": true,
+      "homepage": "https://github.com/storytold/effectcraft",
+      "stars": 4391
+    },
+    {
       "id": "openmausbot",
       "name": "MausBot",
       "code": "Ma",
@@ -4861,7 +4769,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/milind-soni.png?size=128",
-      "stars": 4330,
+      "stars": 4335,
       "platforms": [
         "linux",
         "macos",
@@ -5034,7 +4942,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/elie222.png?size=128",
-      "stars": 3639,
+      "stars": 3641,
       "platforms": [
         "linux",
         "macos"
@@ -5056,7 +4964,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/deta.png?size=128",
-      "stars": 3598,
+      "stars": 3599,
       "platforms": [
         "linux",
         "macos",
@@ -5256,6 +5164,29 @@
       "build": "npm"
     },
     {
+      "id": "wordcraft",
+      "name": "WordCraft",
+      "code": "Wd",
+      "repo": "storytold/wordcraft",
+      "category": "productivity-utilities",
+      "tagline": "Write and format documents",
+      "description": "A Word-style word processor with styles, tables, track changes and DOCX compatibility.",
+      "colors": {
+        "bg": "#0B2A5C",
+        "fg": "#5BA8FF"
+      },
+      "extensions": [
+        "docx",
+        "doc",
+        "odt",
+        "rtf"
+      ],
+      "icon": "https://raw.githubusercontent.com/storytold/wordcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.wordcraft.png",
+      "curated": true,
+      "homepage": "https://github.com/storytold/wordcraft",
+      "stars": 2914
+    },
+    {
       "id": "omnara",
       "name": "Omnara",
       "code": "Om",
@@ -5287,7 +5218,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/DefGuard.png?size=128",
-      "stars": 2865,
+      "stars": 2866,
       "platforms": [
         "linux"
       ],
@@ -5364,7 +5295,7 @@
       "name": "Firecamp",
       "code": "Fi",
       "repo": "firecamp-dev/firecamp",
-      "category": "content-publishing",
+      "category": "developer-tools",
       "tagline": "Unified API development ecosystem for modern teams",
       "description": "Developer-first OpenSource API DevTool, Postman/Insomnia alternative.",
       "colors": {
@@ -5395,11 +5326,32 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/mCaptcha.png?size=128",
-      "stars": 2490,
+      "stars": 2491,
       "platforms": [],
       "homepage": "https://demo.mcaptcha.org",
       "license": "AGPL-3.0",
       "build": "cargo"
+    },
+    {
+      "id": "designcraft",
+      "name": "DesignCraft",
+      "code": "Dc",
+      "repo": "storytold/designcraft",
+      "category": "creative-design",
+      "tagline": "Design and publish page layouts",
+      "description": "An InDesign-style page layout and publishing app with IDML import and export.",
+      "colors": {
+        "bg": "#49021F",
+        "fg": "#FF3366"
+      },
+      "extensions": [
+        "idml",
+        "indd"
+      ],
+      "icon": "https://raw.githubusercontent.com/storytold/designcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.designcraft.png",
+      "curated": true,
+      "homepage": "https://github.com/storytold/designcraft",
+      "stars": 2468
     },
     {
       "id": "openmeter",
@@ -5414,7 +5366,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/openmeterio.png?size=128",
-      "stars": 2377,
+      "stars": 2378,
       "platforms": [
         "linux"
       ],
@@ -5573,7 +5525,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/authgear.png?size=128",
-      "stars": 2102,
+      "stars": 2103,
       "platforms": [],
       "homepage": "https://www.authgear.com",
       "license": "Apache-2.0",
@@ -5678,7 +5630,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/nitrictech.png?size=128",
-      "stars": 2016,
+      "stars": 2017,
       "platforms": [
         "linux",
         "windows"
@@ -5777,7 +5729,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/VoidenHQ.png?size=128",
-      "stars": 1767,
+      "stars": 1769,
       "platforms": [
         "linux",
         "macos",
@@ -5786,6 +5738,27 @@
       "homepage": "https://voiden.md",
       "license": "Apache-2.0",
       "build": "npm"
+    },
+    {
+      "id": "cadcraft",
+      "name": "CADCraft",
+      "code": "Cd",
+      "repo": "storytold/cadcraft",
+      "category": "creative-design",
+      "tagline": "Computer-aided design and drafting",
+      "description": "An AutoCAD-style 2D drafting and design app with layers, blocks, dimensions and DXF/DWG interchange.",
+      "colors": {
+        "bg": "#2E2100",
+        "fg": "#FFC24D"
+      },
+      "extensions": [
+        "dwg",
+        "dxf"
+      ],
+      "icon": "https://raw.githubusercontent.com/storytold/cadcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.cadcraft.png",
+      "curated": true,
+      "homepage": "https://github.com/storytold/cadcraft",
+      "stars": 1714
     },
     {
       "id": "gigapipe",
@@ -5829,6 +5802,29 @@
       "homepage": "https://zero.gitlawb.com",
       "license": "MIT",
       "build": "go"
+    },
+    {
+      "id": "gridcraft",
+      "name": "GridCraft",
+      "code": "Gd",
+      "repo": "storytold/gridcraft",
+      "category": "productivity-utilities",
+      "tagline": "Crunch numbers in spreadsheets",
+      "description": "An Excel-style spreadsheet with formulas, charts, pivot tables and XLSX compatibility.",
+      "colors": {
+        "bg": "#0A3018",
+        "fg": "#3FD17A"
+      },
+      "extensions": [
+        "xlsx",
+        "xls",
+        "csv",
+        "ods"
+      ],
+      "icon": "https://raw.githubusercontent.com/storytold/gridcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.gridcraft.png",
+      "curated": true,
+      "homepage": "https://github.com/storytold/gridcraft",
+      "stars": 1674
     },
     {
       "id": "amical",
@@ -6032,7 +6028,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/meteroid-oss.png?size=128",
-      "stars": 1321,
+      "stars": 1322,
       "platforms": [],
       "homepage": "https://meteroid.com",
       "license": "AGPL-3.0",
@@ -6060,6 +6056,28 @@
       "homepage": "https://jean.build",
       "license": "Apache-2.0",
       "build": "npm"
+    },
+    {
+      "id": "deckcraft",
+      "name": "DeckCraft",
+      "code": "Dk",
+      "repo": "storytold/deckcraft",
+      "category": "productivity-utilities",
+      "tagline": "Build and present slide decks",
+      "description": "A PowerPoint-style presentation app with layouts, themes, animations and PPTX compatibility.",
+      "colors": {
+        "bg": "#3A1306",
+        "fg": "#FF8F6B"
+      },
+      "extensions": [
+        "pptx",
+        "ppt",
+        "odp"
+      ],
+      "icon": "https://raw.githubusercontent.com/storytold/deckcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.deckcraft.png",
+      "curated": true,
+      "homepage": "https://github.com/storytold/deckcraft",
+      "stars": 1314
     },
     {
       "id": "micasa",
@@ -6125,6 +6143,32 @@
       "homepage": "https://docs.cozy.io/en/cozy-stack/",
       "license": "AGPL-3.0",
       "build": "go"
+    },
+    {
+      "id": "soundcraft",
+      "name": "SoundCraft",
+      "code": "Sd",
+      "repo": "storytold/soundcraft",
+      "category": "creative-design",
+      "tagline": "Record, edit and mix audio",
+      "description": "A Pro Tools-style digital audio workstation for recording, editing and mixing multitrack audio.",
+      "colors": {
+        "bg": "#002A26",
+        "fg": "#00E4BB"
+      },
+      "extensions": [
+        "ptx",
+        "wav",
+        "aif",
+        "aiff",
+        "flac",
+        "mp3",
+        "ogg"
+      ],
+      "icon": "https://raw.githubusercontent.com/storytold/soundcraft/HEAD/assets/app-icon/hicolor/256x256/apps/ai.storyteller.soundcraft.png",
+      "curated": true,
+      "homepage": "https://github.com/storytold/soundcraft",
+      "stars": 1233
     },
     {
       "id": "peekaping",
@@ -6267,7 +6311,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/pch.png?size=128",
-      "stars": 890,
+      "stars": 894,
       "platforms": [
         "linux",
         "macos",
@@ -6475,7 +6519,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/tetherto.png?size=128",
-      "stars": 539,
+      "stars": 540,
       "platforms": [
         "linux",
         "macos"
@@ -6496,7 +6540,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/formancehq.png?size=128",
-      "stars": 528,
+      "stars": 529,
       "platforms": [],
       "homepage": "https://www.formance.com",
       "build": "go"
@@ -6593,7 +6637,7 @@
       "name": "Storyden",
       "code": "St",
       "repo": "Southclaws/storyden",
-      "category": "community-social",
+      "category": "content-publishing",
       "tagline": "Build lasting communities with modern forum technology",
       "description": "With a fresh new take on traditional bulletin board forum software, Storyden is a modern, secure and extensible platform for building communities.",
       "colors": {
@@ -6629,28 +6673,6 @@
       "homepage": "https://windshift.sh",
       "license": "AGPL-3.0",
       "build": "go"
-    },
-    {
-      "id": "nonograph",
-      "name": "Nonograph",
-      "code": "No",
-      "repo": "du82/nonograph",
-      "category": "content-publishing",
-      "tagline": "Anonymous publishing with no accounts, tracking, or logins",
-      "description": "Nonograph is a self-hosted anonymous publishing platform. Write anonymously, publish instantly, read privately.",
-      "colors": {
-        "bg": "#14B8A6",
-        "fg": "#FFFFFF"
-      },
-      "icon": "https://github.com/du82.png?size=128",
-      "stars": 319,
-      "platforms": [
-        "linux",
-        "windows"
-      ],
-      "homepage": "https://nonogra.ph",
-      "license": "Unlicense",
-      "build": "cargo"
     },
     {
       "id": "darkwrite",
@@ -6706,7 +6728,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/PrivateCaptcha.png?size=128",
-      "stars": 196,
+      "stars": 197,
       "platforms": [],
       "homepage": "https://privatecaptcha.com",
       "build": "go"
@@ -6847,7 +6869,7 @@
         "fg": "#FFFFFF"
       },
       "icon": "https://github.com/palform.png?size=128",
-      "stars": 47,
+      "stars": 48,
       "platforms": [],
       "homepage": "https://palform.app",
       "license": "AGPL-3.0",
@@ -6957,12 +6979,12 @@
       "name": "Infrastructure & Operations"
     },
     {
-      "id": "business-software",
-      "name": "Business Software"
-    },
-    {
       "id": "data-analytics",
       "name": "Data & Analytics"
+    },
+    {
+      "id": "business-software",
+      "name": "Business Software"
     },
     {
       "id": "desktop-apps",
@@ -6973,12 +6995,12 @@
       "name": "Security & Privacy"
     },
     {
-      "id": "community-social",
-      "name": "Community & Social"
-    },
-    {
       "id": "content-publishing",
       "name": "Content & Publishing"
+    },
+    {
+      "id": "community-social",
+      "name": "Community & Social"
     },
     {
       "id": "cli-tools",
